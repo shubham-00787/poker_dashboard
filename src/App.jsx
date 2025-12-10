@@ -1,11 +1,16 @@
+// src/App.jsx
 import React, { useEffect, useState } from "react";
+import { Routes, Route } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+
 import PlayerDetail from "./components/PlayerDetail";
 import AddPlayerForm from "./components/AddPlayerForm";
 import AddGameResultForAll from "./components/AddGameResultForAll";
+import AddSessionForm from "./components/AddSessionForm";
 import ImageModal from "./components/ImageModal";
+import PlayerFullPage from "./pages/PlayerFullPage";
 
-export default function App() {
+function DashboardPage() {
   const [players, setPlayers] = useState([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [refreshFlag, setRefreshFlag] = useState(0);
@@ -23,10 +28,9 @@ export default function App() {
   const [editingPhotoFile, setEditingPhotoFile] = useState(null);
   const [editingLoading, setEditingLoading] = useState(false);
 
-  // Image modal state
+  // Image modal
   const [imageModalUrl, setImageModalUrl] = useState(null);
 
-  // Close modal with Escape key
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape") setImageModalUrl(null);
@@ -365,7 +369,16 @@ export default function App() {
                               .toUpperCase()}
                           </div>
                         )}
-                        <span className="text-slate-100">
+                        <span
+                          className="text-slate-100 underline hover:text-emerald-400 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(
+                              `/player/${row.player.id}`,
+                              "_blank"
+                            );
+                          }}
+                        >
                           {row.player.name}
                         </span>
                       </div>
@@ -655,5 +668,14 @@ export default function App() {
         onClose={() => setImageModalUrl(null)}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<DashboardPage />} />
+      <Route path="/player/:id" element={<PlayerFullPage />} />
+    </Routes>
   );
 }

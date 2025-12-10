@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../supabaseClient";
+import DatePicker from "./DatePicker";
 
 export default function AddSessionForm({ player, onAdded }) {
   const [buyin, setBuyin] = useState("");
@@ -53,17 +54,12 @@ export default function AddSessionForm({ player, onAdded }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] text-slate-400">
-            Date
-          </label>
-          <input
-            type="date"
-            className="w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-xs text-slate-100"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </div>
+        <DatePicker
+          label="Date"
+          value={date}
+          onChange={setDate}
+        />
+
         <div className="space-y-1">
           <label className="text-[10px] text-slate-400">
             Buy-in

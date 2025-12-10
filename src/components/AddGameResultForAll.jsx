@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "../supabaseClient";
+import DatePicker from "./DatePicker";
 
 export default function AddGameResultForAll({ players, onAdded }) {
   const [date, setDate] = useState(
@@ -65,7 +66,9 @@ export default function AddGameResultForAll({ players, onAdded }) {
       .filter(Boolean);
 
     if (!sessionsToInsert.length) {
-      alert("Enter buy-in and final amount for at least one player who played.");
+      alert(
+        "Enter buy-in and final amount for at least one player who played."
+      );
       return;
     }
 
@@ -111,15 +114,11 @@ export default function AddGameResultForAll({ players, onAdded }) {
         )}
       </div>
 
-      <div className="space-y-2">
-        <label className="text-[10px] text-slate-400">Game date</label>
-        <input
-          type="date"
-          className="rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-xs text-slate-100"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-      </div>
+      <DatePicker
+        label="Game date"
+        value={date}
+        onChange={setDate}
+      />
 
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
