@@ -69,7 +69,7 @@ function DashboardPage({
             <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-3 border border-blue-500/20 min-w-[140px]">
               <div className="flex items-center justify-between">
                 <div className="text-xs text-blue-400/80">Games</div>
-                <div className="text-blue-400/60 text-xl">🎲</div>
+                <div className="text-blue-400/60 text-xl">🃏</div>
               </div>
               <div className="text-2xl font-bold text-blue-400 mt-1">{summary.totalGames}</div>
             </div>
@@ -300,6 +300,7 @@ function AddGamePage({ players, onAdded, setImageModalUrl }) {
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+        {/* onAdded now should be the game-added handler from App (not the players-updated one) */}
         <AddGameResultForAll players={players} onAdded={onAdded} setImageModalUrl={setImageModalUrl} />
       </div>
     </div>
@@ -460,6 +461,9 @@ export default function App() {
   const [leaderboardRows, setLeaderboardRows] = useState([]);
   const [loadingBoard, setLoadingBoard] = useState(false);
 
+  // number of unique games (distinct game_id)
+  const [uniqueGamesCount, setUniqueGamesCount] = useState(0);
+
   // edit player
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [editingName, setEditingName] = useState("");
@@ -487,11 +491,12 @@ export default function App() {
   // summary
   const summary = useMemo(() => {
     const totalPlayers = players.length;
-    const totalGames = leaderboardRows.reduce((acc, r) => acc + r.totalGames, 0);
+    // totalGames now counts unique game_id across fetched sessions
+    const totalGames = uniqueGamesCount;
     const totalProfit = leaderboardRows.reduce((acc, r) => acc + r.netProfit, 0);
     const avgROI = (leaderboardRows.reduce((acc, r) => acc + (r.roi || 0), 0) / Math.max(leaderboardRows.length, 1)).toFixed(1);
     return { totalPlayers, totalGames, totalProfit, avgROI };
-  }, [players, leaderboardRows]);
+  }, [players, leaderboardRows, uniqueGamesCount]);
 
   // toast helper
   const showToast = (message, type = "success", duration = 3000) => {
@@ -516,10 +521,19 @@ export default function App() {
     return () => (alive = false);
   }, [refreshFlag]);
 
+  // ======= two separate refresh handlers =========
+  // called when players list changes (add/edit/remove)
   const handlePlayersChanged = () => {
     setRefreshFlag((f) => f + 1);
     showToast("Players updated", "success");
   };
+
+  // called when a new game is added — refresh leaderboard & show game-specific toast
+  const handleGameAdded = () => {
+    setRefreshFlag((f) => f + 1);
+    showToast("Game saved", "success");
+  };
+  // ===============================================
 
   // build leaderboard rows
   useEffect(() => {
@@ -527,6 +541,7 @@ export default function App() {
     const build = async () => {
       if (!players.length) {
         setLeaderboardRows([]);
+        setUniqueGamesCount(0);
         return;
       }
       setLoadingBoard(true);
@@ -538,6 +553,7 @@ export default function App() {
         if (timeRange === "1Y") d.setFullYear(d.getFullYear() - 1);
         return d.toISOString().slice(0, 10);
       })();
+      // NOTE: select all sessions in timeframe (we'll group by player and compute unique games via game_id)
       let q = supabase.from("sessions").select("*");
       if (cutoff) q = q.gte("game_date", cutoff);
       const { data: sessions, error } = await q;
@@ -545,9 +561,18 @@ export default function App() {
       if (error) {
         console.error("sessions err", error);
         setLeaderboardRows([]);
+        setUniqueGamesCount(0);
         setLoadingBoard(false);
         return;
       }
+
+      // compute unique game ids (use game_id; fallback to game_date if game_id missing)
+      const uniqueGameIds = new Set();
+      (sessions || []).forEach((s) => {
+        if (s.game_id) uniqueGameIds.add(String(s.game_id));
+        else uniqueGameIds.add(String(s.game_date)); // backwards compatible
+      });
+      setUniqueGamesCount(uniqueGameIds.size);
 
       const per = new Map();
       (sessions || []).forEach((s) => {
@@ -732,7 +757,8 @@ export default function App() {
             path="/add-game"
             element={
               <RequireAuth>
-                <AddGamePage players={players} onAdded={handlePlayersChanged} setImageModalUrl={setImageModalUrl} />
+                {/* pass the game-added handler here so adding a game triggers the right toast */}
+                <AddGamePage players={players} onAdded={handleGameAdded} setImageModalUrl={setImageModalUrl} />
               </RequireAuth>
             }
           />

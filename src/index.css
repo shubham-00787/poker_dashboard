@@ -35,6 +35,18 @@ animation: shimmer 3s infinite;
 @keyframes chipDrift { 0% { transform: translateY(0) rotate(0); opacity: 0.9;} 50% { transform: translateY(-20px) rotate(8deg);} 100% { transform: translateY(-40px) rotate(18deg); opacity: 0;} }
 @keyframes wrongShake { 0% { transform: translateX(0) } 25% { transform: translateX(-8px) } 50% { transform: translateX(8px) } 75% { transform: translateX(-5px) } 100% { transform: translateX(0) } }
 
+/* Hide native number input arrows (Chrome, Safari, Edge) */
+.no-arrows::-webkit-outer-spin-button,
+.no-arrows::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+.no-arrows[type="number"] {
+  -moz-appearance: textfield;
+}
+
 
 body {
 background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
