@@ -27,10 +27,10 @@ function sparklinePath(values = [], width = 90, height = 20) {
 }
 
 function isUnlocked() {
-    const persistent = localStorage.getItem("poker_unlocked_persistent") === "1";
-    const sessionOk = sessionStorage.getItem("poker_unlocked") === "1";
-    return persistent || sessionOk;
-  }
+  const persistent = localStorage.getItem("poker_unlocked_persistent") === "1";
+  const sessionOk = sessionStorage.getItem("poker_unlocked") === "1";
+  return persistent || sessionOk;
+}
 
 /* ---------- Dashboard (Home) ---------- */
 function DashboardPage({
@@ -438,9 +438,9 @@ function ManagePlayersPage({ players, onAdded, onEditStart, onDelete, setImageMo
 }
 
 function RequireAuth({ children }) {
-    if (isUnlocked()) return children;
-    return <Navigate to="/login" replace />;
-  }
+  if (isUnlocked()) return children;
+  return <Navigate to="/login" replace />;
+}
 
 /* ---------- App Root (manages data + routes) ---------- */
 export default function App() {
@@ -657,90 +657,101 @@ export default function App() {
   const navClass = (route) =>
     `px-3 py-1.5 rounded-full ${path === route ? "bg-emerald-400/90 text-slate-900 font-medium shadow-sm" : "bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900/40"}`;
 
+  // appUnlocked state so UI shows header as soon as login succeeds
+  const [appUnlocked, setAppUnlocked] = useState(isUnlocked());
+  useEffect(() => {
+    const onStorage = () => setAppUnlocked(isUnlocked());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 relative">
       <div className="fixed inset-0 bg-[url('/noise.png')] opacity-[0.02] pointer-events-none" />
 
-      <header className="border-b border-slate-700/50 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-xl z-10 relative">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Poker Stats Dashboard</h1>
-            <p className="text-sm text-slate-400">Track your home game results and see who's crushing.</p>
-          </div>
+      {/* HEADER — only render when unlocked */}
+      {appUnlocked && (
+        <header className="border-b border-slate-700/50 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-xl z-10 relative">
+          <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Poker Stats Dashboard</h1>
+              <p className="text-sm text-slate-400">Track your home game results and see who's crushing.</p>
+            </div>
 
-          <nav className="flex items-center gap-3">
-            <Link to="/" className={navClass("/")}>
-              <span className="relative">
-                Home
-                {path === "/" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
-              </span>
-            </Link>
-            <Link to="/add-game" className={navClass("/add-game")}>
-              <span className="relative">
-                Add Game
-                {path === "/add-game" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
-              </span>
-            </Link>
-            <Link to="/manage-players" className={navClass("/manage-players")}>
-              <span className="relative">
-                Manage Players
-                {path === "/manage-players" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
-              </span>
-            </Link>
-          </nav>
-        </div>
-      </header>
+            <nav className="flex items-center gap-3">
+              <Link to="/" className={navClass("/")}>
+                <span className="relative">
+                  Home
+                  {path === "/" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+                </span>
+              </Link>
+              <Link to="/add-game" className={navClass("/add-game")}>
+                <span className="relative">
+                  Add Game
+                  {path === "/add-game" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+                </span>
+              </Link>
+              <Link to="/manage-players" className={navClass("/manage-players")}>
+                <span className="relative">
+                  Manage Players
+                  {path === "/manage-players" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+                </span>
+              </Link>
+            </nav>
+          </div>
+        </header>
+      )}
 
       <main className="max-w-7xl mx-auto px-6 py-8 relative z-0">
-      <Routes>
-        {/* public: login */}
-        <Route
+        <Routes>
+          {/* public: login */}
+          <Route
             path="/login"
-            element={<LoginPage onUnlock={() => { /* optional callback */ }} />}
-        />
+            element={<LoginPage onUnlock={() => setAppUnlocked(true)} />}
+          />
 
-        {/* protected routes — wrap each element with RequireAuth */}
-        <Route
+          {/* protected routes — wrap each element with RequireAuth */}
+          <Route
             path="/"
             element={
-            <RequireAuth>
+              <RequireAuth>
                 <DashboardPage
-                players={players}
-                leaderboardRows={leaderboardRows}
-                loadingBoard={loadingBoard}
-                timeRange={timeRange}
-                setTimeRange={setTimeRange}
-                setImageModalUrl={setImageModalUrl}
-                summary={summary}
-                searchState={{ query, setQuery, sortBy, setSortBy, filterStreak, setFilterStreak, mounted }}
+                  players={players}
+                  leaderboardRows={leaderboardRows}
+                  loadingBoard={loadingBoard}
+                  timeRange={timeRange}
+                  setTimeRange={setTimeRange}
+                  setImageModalUrl={setImageModalUrl}
+                  summary={summary}
+                  searchState={{ query, setQuery, sortBy, setSortBy, filterStreak, setFilterStreak, mounted }}
                 />
-            </RequireAuth>
+              </RequireAuth>
             }
-        />
-        <Route
+          />
+          <Route
             path="/add-game"
             element={
-            <RequireAuth>
+              <RequireAuth>
                 <AddGamePage players={players} onAdded={handlePlayersChanged} setImageModalUrl={setImageModalUrl} />
-            </RequireAuth>
+              </RequireAuth>
             }
-        />
-        <Route
+          />
+          <Route
             path="/manage-players"
             element={
-            <RequireAuth>
+              <RequireAuth>
                 <ManagePlayersPage players={players} onAdded={handlePlayersChanged} onEditStart={startEditPlayer} onDelete={handleDeletePlayer} setImageModalUrl={setImageModalUrl} />
-            </RequireAuth>
+              </RequireAuth>
             }
-        />
-        <Route
+          />
+          <Route
             path="/player/:id"
             element={
-            <RequireAuth>
+              <RequireAuth>
                 <PlayerFullPage />
-            </RequireAuth>
+              </RequireAuth>
             }
-        />
+          />
         </Routes>
 
         {/* Edit modal area */}
