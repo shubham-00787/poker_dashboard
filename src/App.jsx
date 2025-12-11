@@ -1,7 +1,8 @@
 // src/App.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import LoginPage from "./pages/LoginPage";
 
 import AddPlayerForm from "./components/AddPlayerForm";
 import AddGameResultForAll from "./components/AddGameResultForAll";
@@ -24,6 +25,12 @@ function sparklinePath(values = [], width = 90, height = 20) {
     })
     .join(" ");
 }
+
+function isUnlocked() {
+    const persistent = localStorage.getItem("poker_unlocked_persistent") === "1";
+    const sessionOk = sessionStorage.getItem("poker_unlocked") === "1";
+    return persistent || sessionOk;
+  }
 
 /* ---------- Dashboard (Home) ---------- */
 function DashboardPage({
@@ -430,6 +437,11 @@ function ManagePlayersPage({ players, onAdded, onEditStart, onDelete, setImageMo
   );
 }
 
+function RequireAuth({ children }) {
+    if (isUnlocked()) return children;
+    return <Navigate to="/login" replace />;
+  }
+
 /* ---------- App Root (manages data + routes) ---------- */
 export default function App() {
   const location = useLocation();
@@ -680,11 +692,19 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 relative z-0">
-        <Routes>
-          <Route
+      <Routes>
+        {/* public: login */}
+        <Route
+            path="/login"
+            element={<LoginPage onUnlock={() => { /* optional callback */ }} />}
+        />
+
+        {/* protected routes — wrap each element with RequireAuth */}
+        <Route
             path="/"
             element={
-              <DashboardPage
+            <RequireAuth>
+                <DashboardPage
                 players={players}
                 leaderboardRows={leaderboardRows}
                 loadingBoard={loadingBoard}
@@ -693,12 +713,34 @@ export default function App() {
                 setImageModalUrl={setImageModalUrl}
                 summary={summary}
                 searchState={{ query, setQuery, sortBy, setSortBy, filterStreak, setFilterStreak, mounted }}
-              />
+                />
+            </RequireAuth>
             }
-          />
-          <Route path="/add-game" element={<AddGamePage players={players} onAdded={handlePlayersChanged} setImageModalUrl={setImageModalUrl} />} />
-          <Route path="/manage-players" element={<ManagePlayersPage players={players} onAdded={handlePlayersChanged} onEditStart={startEditPlayer} onDelete={handleDeletePlayer} setImageModalUrl={setImageModalUrl} />} />
-          <Route path="/player/:id" element={<PlayerFullPage />} />
+        />
+        <Route
+            path="/add-game"
+            element={
+            <RequireAuth>
+                <AddGamePage players={players} onAdded={handlePlayersChanged} setImageModalUrl={setImageModalUrl} />
+            </RequireAuth>
+            }
+        />
+        <Route
+            path="/manage-players"
+            element={
+            <RequireAuth>
+                <ManagePlayersPage players={players} onAdded={handlePlayersChanged} onEditStart={startEditPlayer} onDelete={handleDeletePlayer} setImageModalUrl={setImageModalUrl} />
+            </RequireAuth>
+            }
+        />
+        <Route
+            path="/player/:id"
+            element={
+            <RequireAuth>
+                <PlayerFullPage />
+            </RequireAuth>
+            }
+        />
         </Routes>
 
         {/* Edit modal area */}
