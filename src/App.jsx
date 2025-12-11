@@ -7,6 +7,7 @@ import AddPlayerForm from "./components/AddPlayerForm";
 import AddGameResultForAll from "./components/AddGameResultForAll";
 import ImageModal from "./components/ImageModal";
 import PlayerFullPage from "./pages/PlayerFullPage";
+import PlayerList from "./components/PlayerList";
 
 /* ---------- small helpers ---------- */
 function sparklinePath(values = [], width = 90, height = 20) {
@@ -36,6 +37,7 @@ function DashboardPage({
   searchState,
 }) {
   const { query, setQuery, sortBy, setSortBy, filterStreak, setFilterStreak, mounted } = searchState;
+  const [hoverTip, setHoverTip] = useState({ playerId: null, idx: null });
 
   return (
     <div className="space-y-6">
@@ -44,20 +46,26 @@ function DashboardPage({
           <div>
             <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight">Leaderboard</h1>
             <p className="mt-1 text-sm text-slate-400 max-w-xl">
-              Sorted by net gains for the selected time range. Click a name to open the player dashboard with deep analytics.
+              Ranked by net profit for the chosen timeframe — quickly see who's winning, who's losing, and click a player for session-level details, ROI, and performance charts.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-slate-900/60 p-3 border border-slate-800 min-w-[140px]">
-              <div className="text-xs text-slate-400">Players</div>
-              <div className="text-lg font-semibold text-slate-100">{summary.totalPlayers}</div>
+            <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-3 border border-emerald-500/20 min-w-[140px]">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-emerald-400/80">Players</div>
+                <div className="text-emerald-400/60 text-xl">👥</div>
+              </div>
+              <div className="text-2xl font-bold text-emerald-400 mt-1">{summary.totalPlayers}</div>
             </div>
-            <div className="rounded-xl bg-slate-900/60 p-3 border border-slate-800 min-w-[140px]">
-              <div className="text-xs text-slate-400">Games</div>
-              <div className="text-lg font-semibold text-slate-100">{summary.totalGames}</div>
+
+            <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-3 border border-blue-500/20 min-w-[140px]">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-blue-400/80">Games</div>
+                <div className="text-blue-400/60 text-xl">🎲</div>
+              </div>
+              <div className="text-2xl font-bold text-blue-400 mt-1">{summary.totalGames}</div>
             </div>
-            {/* Removed Total profit and Avg ROI cards as requested */}
           </div>
         </div>
       </div>
@@ -121,21 +129,41 @@ function DashboardPage({
                 <th className="px-4 py-3 text-right font-medium tracking-wide">Games</th>
                 <th className="px-4 py-3 text-center font-medium tracking-wide">Form</th>
                 <th className="px-4 py-3 text-right font-medium tracking-wide">Net</th>
-                <th className="px-4 py-3 text-left font-medium tracking-wide">Spark</th>
               </tr>
             </thead>
 
             <tbody>
               {leaderboardRows.map((row, idx) => {
                 const profit = row.netProfit;
-                const sparkPath = sparklinePath(row.lastFive || [], 90, 20);
                 return (
                   <tr
                     key={row.player.id}
-                    className={`border-t border-slate-800 hover:translate-y-[-2px] hover:shadow-md transition-transform duration-200 opacity-100`}
+                    className={`
+                      border-t border-slate-800/50
+                      hover:bg-gradient-to-r hover:from-slate-800/40 hover:to-transparent
+                      transition-all duration-200
+                      ${idx % 2 === 0 ? "bg-slate-900/20" : "bg-transparent"}
+                    `}
                     style={{ transitionDelay: `${idx * 25}ms` }}
                   >
-                    <td className="px-4 py-3 text-slate-400">{idx + 1}</td>
+                    <td className="px-4 py-3">
+                      {idx < 3 ? (
+                        <div
+                          className={`
+                            w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold
+                            ${idx === 0 ? "bg-gradient-to-br from-yellow-400 to-amber-500 text-amber-950" : ""}
+                            ${idx === 1 ? "bg-gradient-to-br from-slate-300 to-slate-400 text-slate-900" : ""}
+                            ${idx === 2 ? "bg-gradient-to-br from-orange-400 to-orange-600 text-orange-950" : ""}
+                          `}
+                        >
+                          {idx + 1}
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold">
+                          {idx + 1}
+                        </div>
+                      )}
+                    </td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -171,30 +199,70 @@ function DashboardPage({
                     <td className="px-4 py-3 text-right text-slate-200">{row.totalGames}</td>
 
                     <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-2">
                         {(row.streak || []).length === 0 && <span className="text-[11px] text-slate-500">–</span>}
-                        {(row.streak || []).map((s, i) => (
-                          <div key={i} className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold border ${s === "W" ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" : "bg-rose-500/10 border-rose-500 text-rose-400"}`}>
-                            {s}
-                          </div>
-                        ))}
+                        {(row.streak || []).map((s, i) => {
+                          const val = row.lastFive && row.lastFive[i] !== undefined ? row.lastFive[i] : null;
+                          const positive = val !== null && !Number.isNaN(Number(val)) && Number(val) > 0;
+                          const negative = val !== null && !Number.isNaN(Number(val)) && Number(val) < 0;
+
+                          return (
+                            <div
+                              key={i}
+                              className="relative"
+                              onMouseEnter={() => setHoverTip({ playerId: row.player.id, idx: i })}
+                              onMouseLeave={() => setHoverTip({ playerId: null, idx: null })}
+                            >
+                              <div
+                                className={`
+                                  w-7 h-7 rounded-full flex items-center justify-center 
+                                  text-xs font-bold shadow-lg
+                                  transition-transform hover:scale-110
+                                  ${s === "W"
+                                    ? "bg-gradient-to-br from-emerald-400 to-green-500 text-white border-2 border-emerald-300/50"
+                                    : "bg-gradient-to-br from-rose-400 to-red-500 text-white border-2 border-rose-300/50"
+                                  }
+                                `}
+                              >
+                                {s}
+                              </div>
+
+                              {hoverTip.playerId === row.player.id && hoverTip.idx === i && val !== null && val !== undefined && !Number.isNaN(Number(val)) && (
+                                <div className="absolute left-1/2 -top-10 transform -translate-x-1/2">
+                                  <div className="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium shadow-md"
+                                       style={{
+                                         background: positive ? "rgba(16,185,129,0.12)" : negative ? "rgba(239,68,68,0.12)" : "rgba(148,163,184,0.08)",
+                                         color: positive ? "#4ade80" : negative ? "#fb7185" : "#94a3b8",
+                                         border: "1px solid rgba(255,255,255,0.03)",
+                                         backdropFilter: "blur(6px)"
+                                       }}>
+                                    {positive ? "+" : ""}
+                                    {Number(val).toFixed(2)}
+                                  </div>
+                                  <div className="w-2 h-2 bg-transparent mx-auto mt-0.5" />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-300"}`}>
+                      <span
+                        className={`
+                          font-semibold px-3 py-1 rounded-full
+                          ${profit > 0
+                            ? "text-emerald-400 bg-emerald-400/10"
+                            : profit < 0
+                            ? "text-rose-400 bg-rose-400/10"
+                            : "text-slate-300"
+                          }
+                        `}
+                      >
                         {profit >= 0 ? "+" : ""}
                         {profit.toFixed(2)}
                       </span>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <svg width="90" height="20" viewBox="0 0 90 20" className="rounded" preserveAspectRatio="none">
-                          <path d={sparkPath} fill="none" stroke={row.lastFive && row.lastFive.reduce((a, b) => a + b, 0) >= 0 ? "#10b981" : "#ef4444"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <div className="text-xs text-slate-400">{(row.lastFive || []).length} games</div>
-                      </div>
                     </td>
                   </tr>
                 );
@@ -202,7 +270,7 @@ function DashboardPage({
 
               {leaderboardRows.length === 0 && !loadingBoard && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
                     No players match this filter/search.
                   </td>
                 </tr>
@@ -220,77 +288,144 @@ function AddGamePage({ players, onAdded, setImageModalUrl }) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-slate-100">Add Game Result</h2>
+        <h2 className="text-2xl font-semibold text-slate-100">Add Game</h2>
         <p className="text-sm text-slate-400">Enter buy-ins and final cashout for each player who played.</p>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-        <AddGameResultForAll players={players} onAdded={onAdded} />
+        <AddGameResultForAll players={players} onAdded={onAdded} setImageModalUrl={setImageModalUrl} />
       </div>
     </div>
   );
 }
 
-/* ---------- Manage Players Page ---------- */
+/* ---------- Manage Players Page (two clear blocks on the right) ---------- */
 function ManagePlayersPage({ players, onAdded, onEditStart, onDelete, setImageModalUrl }) {
+  const [selected, setSelected] = useState(players?.[0] || null);
+  const [query, setQuery] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState({ open: false, id: null, name: null });
+
+  useEffect(() => {
+    if (!players || players.length === 0) {
+      setSelected(null);
+      return;
+    }
+    setSelected((prev) => {
+      if (!prev) return players[0];
+      const found = players.find((p) => p.id === prev.id);
+      return found || players[0];
+    });
+  }, [players]);
+
+  const filtered = useMemo(() => {
+    const q = (query || "").trim().toLowerCase();
+    let arr = (players || []).slice();
+    if (q) arr = arr.filter((p) => p.name?.toLowerCase().includes(q));
+    return arr;
+  }, [players, query]);
+
+  const askRemove = (p) => {
+    if (!p) return;
+    setConfirmRemove({ open: true, id: p.id, name: p.name });
+  };
+
+  const confirmRemoveNow = async () => {
+    if (!confirmRemove.id) return;
+    await onDelete(confirmRemove.id);
+    setConfirmRemove({ open: false, id: null, name: null });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-100">Manage Players</h2>
-        <p className="text-sm text-slate-400">Add, edit, or remove player profiles.</p>
-      </div>
-
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-300">Current players</span>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold text-slate-100">Manage Players</h2>
+          <p className="text-sm text-slate-400">Quickly add, edit, or remove players.</p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-transparent text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((p) => (
-                <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-900/30">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {p.photo_url ? (
-                        <img src={p.photo_url} alt={p.name} onClick={() => setImageModalUrl(p.photo_url)} className="w-8 h-8 rounded-full object-cover border border-slate-700 cursor-zoom-in transform transition hover:scale-110" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-300 border border-slate-700">
-                          {p.name?.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-slate-100">{p.name}</span>
-                    </div>
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => onEditStart(p)} className="text-[12px] px-3 py-1 rounded-lg bg-slate-800 text-slate-100 border border-slate-700 hover:bg-slate-700">Edit</button>
-                      <button onClick={() => onDelete(p.id)} className="text-[12px] px-3 py-1 rounded-lg bg-rose-600/10 text-rose-400 border border-rose-600/30 hover:bg-rose-600/20">Remove</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-
-              {players.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="px-4 py-6 text-center text-slate-500">No players yet. Add one above.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-3">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search players..." className="rounded-full bg-slate-900 border border-slate-800 px-4 py-2 text-sm text-slate-200 w-64 focus:outline-none" />
+          {/* intentionally removed green Add player header button */}
         </div>
       </div>
 
-      <div className="mt-4">
-        <AddPlayerForm onAdded={onAdded} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: players list */}
+        <div className="lg:col-span-1">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 h-full">
+            <div className="text-sm font-medium text-slate-300 mb-3">Players</div>
+            <div className="rounded-xl border border-slate-800 p-2 bg-slate-950/80 h-[72vh] overflow-auto">
+              <PlayerList players={filtered} selectedPlayer={selected} onSelect={(p) => setSelected(p)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Right: selected player card + add player card (separate) */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Selected player card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 flex items-start justify-between">
+            {!selected ? (
+              <div className="text-center py-12 text-slate-500 w-full">No player selected. Choose one from the list to edit or remove.</div>
+            ) : (
+              <div className="flex items-center gap-4">
+                {selected.photo_url ? (
+                  <img src={selected.photo_url} alt={selected.name} onClick={() => setImageModalUrl(selected.photo_url)} className="w-16 h-16 rounded-full object-cover border border-slate-700 cursor-zoom-in hover:scale-105 transition" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-xl text-slate-300 border border-slate-700">{selected.name?.charAt(0).toUpperCase()}</div>
+                )}
+
+                <div>
+                  <div className="text-xl font-semibold text-slate-100">{selected.name}</div>
+                  <div className="text-xs text-slate-400">Selected player — edit or remove this profile.</div>
+                </div>
+              </div>
+            )}
+
+            {/* Edit & Remove buttons inside same card */}
+            <div className="ml-6 flex flex-col gap-3">
+              <button onClick={() => selected && onEditStart(selected)} disabled={!selected} className="px-4 py-2 rounded-md border border-slate-700 text-slate-200 hover:bg-slate-900/40 disabled:opacity-50">
+                Edit
+              </button>
+              <button onClick={() => selected && askRemove(selected)} disabled={!selected} className="px-4 py-2 rounded-md bg-rose-600/10 text-rose-400 border border-rose-600/30 hover:bg-rose-600/20 disabled:opacity-50">
+                Remove
+              </button>
+            </div>
+          </div>
+
+          {/* Add player card (separate block) */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-sm font-medium text-slate-300">Add Player</div>
+                <div className="text-xs text-slate-400">Create a player profile (optional photo)</div>
+              </div>
+              <div className="text-xs text-slate-400">Ready</div>
+            </div>
+
+            {/* the AddPlayerForm itself has its own compact header; that's expected */}
+            <AddPlayerForm onAdded={onAdded} showHeader={false} />
+          </div>
+        </div>
       </div>
+
+      {/* Confirm remove modal */}
+      {confirmRemove.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmRemove({ open: false, id: null, name: null })} />
+          <div
+            className="relative z-10 max-w-md w-full rounded-2xl border border-slate-800 bg-slate-950/90 p-5 transform transition duration-150 ease-out scale-100"
+            style={{ animation: "none" }}
+          >
+            <h3 className="text-lg font-semibold text-slate-100">Remove player?</h3>
+            <p className="text-sm text-slate-400 mt-2">This will remove <strong className="text-slate-100">{confirmRemove.name}</strong> and all their sessions. This action cannot be undone.</p>
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setConfirmRemove({ open: false, id: null, name: null })} className="px-3 py-2 rounded-md border border-slate-700 text-slate-200">Cancel</button>
+              <button onClick={confirmRemoveNow} className="px-4 py-2 rounded-md bg-rose-600 text-white">Confirm remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -322,6 +457,12 @@ export default function App() {
   // image modal
   const [imageModalUrl, setImageModalUrl] = useState(null);
 
+  // toast/snackbar
+  const [toast, setToast] = useState({ open: false, message: "", type: "success" });
+
+  // edit-confirm modal state (ask before saving edits)
+  const [editConfirmOpen, setEditConfirmOpen] = useState(false);
+
   // mount flag
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -331,7 +472,7 @@ export default function App() {
 
   const searchState = { query, setQuery, sortBy, setSortBy, filterStreak, setFilterStreak, mounted };
 
-  // summary derived later
+  // summary
   const summary = useMemo(() => {
     const totalPlayers = players.length;
     const totalGames = leaderboardRows.reduce((acc, r) => acc + r.totalGames, 0);
@@ -339,6 +480,14 @@ export default function App() {
     const avgROI = (leaderboardRows.reduce((acc, r) => acc + (r.roi || 0), 0) / Math.max(leaderboardRows.length, 1)).toFixed(1);
     return { totalPlayers, totalGames, totalProfit, avgROI };
   }, [players, leaderboardRows]);
+
+  // toast helper
+  const showToast = (message, type = "success", duration = 3000) => {
+    setToast({ open: true, message, type });
+    setTimeout(() => {
+      setToast((t) => ({ ...t, open: false }));
+    }, duration);
+  };
 
   // load players
   useEffect(() => {
@@ -355,9 +504,12 @@ export default function App() {
     return () => (alive = false);
   }, [refreshFlag]);
 
-  const handlePlayersChanged = () => setRefreshFlag((f) => f + 1);
+  const handlePlayersChanged = () => {
+    setRefreshFlag((f) => f + 1);
+    showToast("Players updated", "success");
+  };
 
-  // build leaderboard (shared)
+  // build leaderboard rows
   useEffect(() => {
     let alive = true;
     const build = async () => {
@@ -424,12 +576,16 @@ export default function App() {
     return () => (alive = false);
   }, [players, timeRange, refreshFlag, query, sortBy, filterStreak]);
 
-  // delete player
+  // delete player (called by ManagePlayersPage)
   const handleDeletePlayer = async (playerId) => {
-    if (!confirm("Remove this player and all their stats?")) return;
     const { error } = await supabase.from("players").delete().eq("id", playerId);
-    if (error) console.error("delete player err", error);
-    else handlePlayersChanged();
+    if (error) {
+      console.error("delete player err", error);
+      showToast("Failed to remove player", "error");
+    } else {
+      handlePlayersChanged();
+      showToast("Player removed", "success");
+    }
   };
 
   // edit player flows
@@ -437,19 +593,21 @@ export default function App() {
     setEditingPlayer(p);
     setEditingName(p.name || "");
     setEditingPhotoFile(null);
-    // scroll to top for edit if needed
+    setEditConfirmOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const cancelEditPlayer = () => {
     setEditingPlayer(null);
     setEditingName("");
     setEditingPhotoFile(null);
+    setEditConfirmOpen(false);
   };
-  const saveEditPlayer = async (e) => {
-    e.preventDefault();
+
+  // actual save implementation (called after user confirms)
+  const saveEditPlayerActual = async () => {
     if (!editingPlayer) return;
     if (!editingName.trim()) {
-      alert("Name cannot be empty.");
+      showToast("Name cannot be empty.", "error");
       return;
     }
     setEditingLoading(true);
@@ -462,7 +620,7 @@ export default function App() {
         const { error: upErr } = await supabase.storage.from("player-photos").upload(path, editingPhotoFile);
         if (upErr) {
           console.error("upload err", upErr);
-          alert("Error uploading photo");
+          showToast("Error uploading photo", "error");
         } else {
           const { data } = supabase.storage.from("player-photos").getPublicUrl(path);
           newPhotoUrl = data.publicUrl;
@@ -471,13 +629,15 @@ export default function App() {
       const { error } = await supabase.from("players").update({ name: editingName.trim(), photo_url: newPhotoUrl }).eq("id", editingPlayer.id);
       if (error) {
         console.error("update err", error);
-        alert("Error updating player");
+        showToast("Error updating player", "error");
       } else {
         cancelEditPlayer();
         handlePlayersChanged();
+        showToast("Player updated", "success");
       }
     } finally {
       setEditingLoading(false);
+      setEditConfirmOpen(false);
     }
   };
 
@@ -486,29 +646,40 @@ export default function App() {
     `px-3 py-1.5 rounded-full ${path === route ? "bg-emerald-400/90 text-slate-900 font-medium shadow-sm" : "bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900/40"}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 text-slate-100">
-      <header className="border-b border-slate-800">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 relative">
+      <div className="fixed inset-0 bg-[url('/noise.png')] opacity-[0.02] pointer-events-none" />
+
+      <header className="border-b border-slate-700/50 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-xl z-10 relative">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-100">Poker Stats Dashboard</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Poker Stats Dashboard</h1>
             <p className="text-sm text-slate-400">Track your home game results and see who's crushing.</p>
           </div>
 
           <nav className="flex items-center gap-3">
             <Link to="/" className={navClass("/")}>
-              Home
+              <span className="relative">
+                Home
+                {path === "/" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+              </span>
             </Link>
             <Link to="/add-game" className={navClass("/add-game")}>
-              Add Game Result
+              <span className="relative">
+                Add Game
+                {path === "/add-game" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+              </span>
             </Link>
             <Link to="/manage-players" className={navClass("/manage-players")}>
-              Manage Players
+              <span className="relative">
+                Manage Players
+                {path === "/manage-players" && <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-cyan-400" />}
+              </span>
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 relative z-0">
         <Routes>
           <Route
             path="/"
@@ -525,18 +696,12 @@ export default function App() {
               />
             }
           />
-
           <Route path="/add-game" element={<AddGamePage players={players} onAdded={handlePlayersChanged} setImageModalUrl={setImageModalUrl} />} />
-
-          <Route
-            path="/manage-players"
-            element={<ManagePlayersPage players={players} onAdded={handlePlayersChanged} onEditStart={startEditPlayer} onDelete={handleDeletePlayer} setImageModalUrl={setImageModalUrl} />}
-          />
-
+          <Route path="/manage-players" element={<ManagePlayersPage players={players} onAdded={handlePlayersChanged} onEditStart={startEditPlayer} onDelete={handleDeletePlayer} setImageModalUrl={setImageModalUrl} />} />
           <Route path="/player/:id" element={<PlayerFullPage />} />
         </Routes>
 
-        {/* Edit modal area (simple inline edit) */}
+        {/* Edit modal area */}
         {editingPlayer && (
           <div className="fixed bottom-6 right-6 z-50 w-[360px] rounded-xl bg-slate-900/80 border border-slate-800 p-4 shadow-xl">
             <div className="flex items-center justify-between">
@@ -552,12 +717,10 @@ export default function App() {
                 </div>
               </div>
 
-              <button onClick={() => cancelEditPlayer()} className="text-xs text-slate-400">
-                Close
-              </button>
+              <button onClick={() => cancelEditPlayer()} className="text-xs text-slate-400">Close</button>
             </div>
 
-            <form onSubmit={saveEditPlayer} className="mt-3 space-y-2 text-sm">
+            <form onSubmit={(e) => { e.preventDefault(); setEditConfirmOpen(true); }} className="mt-3 space-y-2 text-sm">
               <div>
                 <label className="text-xs text-slate-400">Name</label>
                 <input value={editingName} onChange={(e) => setEditingName(e.target.value)} className="w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100" />
@@ -568,20 +731,49 @@ export default function App() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => cancelEditPlayer()} className="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-900/40">
-                  Cancel
-                </button>
-                <button type="submit" disabled={editingLoading} className="px-3 py-1.5 rounded-lg bg-emerald-400 text-slate-900 text-sm font-medium hover:bg-emerald-500 disabled:opacity-60">
-                  Save
-                </button>
+                <button type="button" onClick={() => cancelEditPlayer()} className="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-900/40">Cancel</button>
+                <button type="submit" disabled={editingLoading} className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-medium shadow-lg shadow-emerald-500/30 transform transition-all hover:scale-105 hover:shadow-xl hover:shadow-emerald-500/40 active:scale-95 disabled:opacity-60">Save</button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* Edit confirmation modal (asks before actually saving edits) */}
+        {editConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setEditConfirmOpen(false)} />
+            <div className="relative z-10 max-w-md w-full rounded-2xl border border-slate-800 bg-slate-950/90 p-5 transform transition duration-150 ease-out scale-100">
+              <h3 className="text-lg font-semibold text-slate-100">Confirm save</h3>
+              <p className="text-sm text-slate-400 mt-2">You're about to update this player to:</p>
+              <div className="mt-3 px-3 py-2 rounded-md bg-slate-900 border border-slate-800">
+                <div className="text-sm font-medium text-slate-100">{editingName}</div>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-3">
+                <button onClick={() => setEditConfirmOpen(false)} className="px-3 py-2 rounded-md border border-slate-700 text-slate-200">Cancel</button>
+                <button onClick={() => saveEditPlayerActual()} className="px-4 py-2 rounded-md bg-emerald-500 text-slate-900 font-medium">Confirm and Save</button>
+              </div>
+            </div>
           </div>
         )}
       </main>
 
       {/* Global image modal */}
       {imageModalUrl && <ImageModal url={imageModalUrl} onClose={() => setImageModalUrl(null)} />}
+
+      {/* Toast / Snackbar */}
+      <div className="fixed right-6 bottom-6 z-60 flex flex-col gap-3 items-end">
+        {toast.open && (
+          <div
+            className={`min-w-[220px] max-w-sm rounded-lg px-4 py-3 shadow-lg transform transition-all duration-200 ${
+              toast.type === "success" ? "bg-emerald-600/95 text-white" : toast.type === "error" ? "bg-rose-600/95 text-white" : "bg-slate-800 text-slate-100"
+            }`}
+            role="status"
+          >
+            <div className="text-sm font-medium">{toast.message}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

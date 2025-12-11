@@ -534,32 +534,60 @@ export default function PlayerFullPage() {
   );
 }
 
+// Define the new color tokens
+const COLORS = {
+  primaryAccent: "#10b981", // Emerald (unchanged)
+  secondaryAccent: ["#f59e0b", "#fbbf24"], // Amber/Gold
+  tertiary: ["#3b82f6", "#60a5fa"], // Blue
+  success: "#34d399", // Brighter emerald
+  danger: "#f87171", // Vibrant red
+  gray: {
+    light: "#e5e7eb", // Slight purple tint
+    medium: "#6b7280", // Slight purple tint
+    dark: "#4b5563", // Slight purple tint
+  },
+};
+
+// Updated StatCard component
 function StatCard({ label, value }) {
   return (
-    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
-      <div className="text-[10px] text-slate-400">{label}</div>
-      <div className="text-lg font-semibold mt-1 text-slate-100">
+    <div
+      className="p-4 rounded-xl border"
+      style={{
+        backgroundColor: "rgba(31, 41, 55, 0.6)", // Warm gray with purple tint
+        borderColor: COLORS.gray.dark,
+      }}
+    >
+      <div className="text-[10px]" style={{ color: COLORS.gray.medium }}>
+        {label}
+      </div>
+      <div className="text-lg font-semibold mt-1" style={{ color: COLORS.gray.light }}>
         {value}
       </div>
     </div>
   );
 }
 
+// Updated LegendDot component
 function LegendDot({ color, label }) {
   return (
     <span className="flex items-center gap-1">
       <span
         className="w-2 h-2 rounded-full"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: COLORS[color] || color }}
       />
-      <span>{label}</span>
+      <span style={{ color: COLORS.gray.light }}>{label}</span>
     </span>
   );
 }
 
+// Updated EmptyChartPlaceholder component
 function EmptyChartPlaceholder() {
   return (
-    <div className="w-full h-full flex items-center justify-center text-[11px] text-slate-500">
+    <div
+      className="w-full h-full flex items-center justify-center text-[11px]"
+      style={{ color: COLORS.gray.medium }}
+    >
       Not enough data yet. Play a few games!
     </div>
   );

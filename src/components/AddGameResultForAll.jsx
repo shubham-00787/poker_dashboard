@@ -1,13 +1,47 @@
-import React, { useState } from "react";
+// src/components/AddGameResultForAll.jsx
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import DatePicker from "./DatePicker";
 
-export default function AddGameResultForAll({ players, onAdded }) {
-  const [date, setDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+export default function AddGameResultForAll({ players, onAdded, setImageModalUrl }) {
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState({});
   const [loading, setLoading] = useState(false);
+
+  // confirmation modal
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toSavePayload, setToSavePayload] = useState(null);
+  const [modalAnimateIn, setModalAnimateIn] = useState(false);
+
+  // toast/snackbar
+  const [toast, setToast] = useState({ visible: false, msg: "", type: "info" });
+  const toastTimer = useRef(null);
+  const showToast = (msg, type = "info", ms = 3000) => {
+    clearTimeout(toastTimer.current);
+    setToast({ visible: true, msg, type });
+    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), ms);
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setConfirmOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // animate modal entrance when confirmOpen flips to true
+  useEffect(() => {
+    if (confirmOpen) {
+      setModalAnimateIn(false);
+      const t = setTimeout(() => setModalAnimateIn(true), 15);
+      return () => clearTimeout(t);
+    } else {
+      setModalAnimateIn(false);
+    }
+  }, [confirmOpen]);
 
   const handleChange = (playerId, field, value) => {
     setRows((prev) => ({
@@ -23,8 +57,7 @@ export default function AddGameResultForAll({ players, onAdded }) {
   const handleTogglePlayed = (playerId) => {
     setRows((prev) => {
       const current = prev[playerId] || {};
-      const played =
-        typeof current.played === "boolean" ? !current.played : false;
+      const played = typeof current.played === "boolean" ? !current.played : false;
       return {
         ...prev,
         [playerId]: { ...current, played },
@@ -32,27 +65,34 @@ export default function AddGameResultForAll({ players, onAdded }) {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!players.length) return;
+  // rowsCount used in remarks
+  const rowsCount = useMemo(() => {
+    let count = 0;
+    players.forEach((p) => {
+      const r = rows[p.id] || {};
+      const played = typeof r.played === "boolean" ? r.played : true;
+      if (!played) return;
+      const buyin = r.buyin === "" || r.buyin === undefined ? null : Number(r.buyin);
+      const cashout = r.cashout === "" || r.cashout === undefined ? null : Number(r.cashout);
+      if (buyin === null || cashout === null || Number.isNaN(buyin) || Number.isNaN(cashout)) return;
+      count++;
+    });
+    return count;
+  }, [players, rows]);
 
-    const sessionsToInsert = players
+  // prepare sessions to insert given current rows
+  const buildSessionsToInsert = () => {
+    if (!players.length) return [];
+    return players
       .map((p) => {
         const row = rows[p.id] || {};
-        const played =
-          typeof row.played === "boolean" ? row.played : true;
-
+        const played = typeof row.played === "boolean" ? row.played : true;
         if (!played) return null;
 
         const buyin = row.buyin;
         const cashout = row.cashout;
 
-        if (
-          buyin === undefined ||
-          cashout === undefined ||
-          buyin === "" ||
-          cashout === ""
-        ) {
+        if (buyin === undefined || cashout === undefined || buyin === "" || cashout === "") {
           return null;
         }
 
@@ -64,133 +104,358 @@ export default function AddGameResultForAll({ players, onAdded }) {
         };
       })
       .filter(Boolean);
+  };
 
-    if (!sessionsToInsert.length) {
-      alert(
-        "Enter buy-in and final amount for at least one player who played."
-      );
+  const performSave = async (sessionsToInsert) => {
+    if (!sessionsToInsert?.length) {
+      showToast("No valid rows to save.", "error", 3500);
       return;
     }
-
+    setConfirmOpen(false);
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("sessions")
-        .insert(sessionsToInsert);
-
+      const { error } = await supabase.from("sessions").insert(sessionsToInsert);
       if (error) {
         console.error("Error inserting game result", error);
-        alert("Error saving game result. Check console.");
+        showToast("Error saving game result. Check console.", "error", 4500);
       } else {
         setRows({});
         onAdded?.();
+        showToast("Game results saved.", "success", 3000);
       }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const sessionsToInsert = buildSessionsToInsert();
+    if (!sessionsToInsert.length) {
+      showToast("Enter buy-in and final amount for at least one player who played.", "error", 4500);
+      return;
+    }
+    // compute short list of player objects (id, name, photo)
+    const playerObjs = sessionsToInsert.map((s) => {
+      const p = players.find((pp) => pp.id === s.player_id);
+      return p ? { id: p.id, name: p.name, photo_url: p.photo_url } : { id: s.player_id, name: String(s.player_id) };
+    });
+    setToSavePayload({ sessionsToInsert, players: playerObjs });
+    setConfirmOpen(true);
+  };
+
   if (!players.length) {
-    return (
-      <div className="text-xs text-slate-500">
-        No players yet. Add some players first.
-      </div>
-    );
+    return <div className="text-xs text-slate-500">No players yet. Add some players first.</div>;
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-3"
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-slate-200">
-          Add Game Result (all players)
-        </h3>
-        {loading && (
-          <span className="text-[10px] text-slate-500">
-            Saving...
-          </span>
-        )}
+    <>
+      <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950/80 to-slate-900/80 p-5 space-y-4 relative">
+        {/* header (title changed) */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-100">Add Game Result</h3>
+            <p className="mt-1 text-xs text-slate-400 max-w-xl">
+              Mark who played, enter buy-ins and final cashout. Rows with missing inputs are ignored when saving.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <DatePicker label="Game date" value={date} onChange={setDate} />
+          </div>
+        </div>
+
+        {/* table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-slate-400 text-xs">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Played</th>
+                <th className="px-3 py-2 text-left font-medium">Player</th>
+                <th className="px-3 py-2 text-right font-medium">Buy-in</th>
+                <th className="px-3 py-2 text-right font-medium">Amount After Game</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {players.map((p) => {
+                const row = rows[p.id] || {};
+                const played = typeof row.played === "boolean" ? row.played : true;
+                const missingInputs =
+                  played &&
+                  (row.buyin === undefined ||
+                    row.cashout === undefined ||
+                    row.buyin === "" ||
+                    row.cashout === "" ||
+                    Number.isNaN(Number(row.buyin)) ||
+                    Number.isNaN(Number(row.cashout)));
+
+                return (
+                  <tr
+                    key={p.id}
+                    className={`border-t border-slate-900/80 transform transition-all duration-150 hover:scale-[1.001] ${missingInputs ? "opacity-80" : ""}`}
+                  >
+                    {/* Beautiful Played toggle */}
+                    <td className="px-3 py-3 align-middle">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePlayed(p.id)}
+                        aria-pressed={played}
+                        aria-label={played ? `Exclude ${p.name}` : `Include ${p.name}`}
+                        className={`relative inline-flex items-center h-8 w-14 rounded-full transition-all transform focus:outline-none ${
+                          played ? "bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_6px_18px_rgba(34,197,94,0.12)]" : "bg-slate-800/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
+                        }`}
+                      >
+                        {/* animated knob */}
+                        <span
+                          className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white/95 transform transition-all shadow-md ${
+                            played ? "translate-x-6" : "translate-x-0"
+                          }`}
+                        >
+                          <span className="block h-full w-full rounded-full" />
+                        </span>
+
+                        {/* check icon when on */}
+                        <span className={`absolute inset-y-0 left-1 flex items-center pl-1 transition-opacity ${played ? "opacity-100" : "opacity-0"}`} aria-hidden>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="stroke-emerald-700" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5 13L10 18L20 6" stroke="rgba(6,95,70,0.95)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+
+                        {/* minus icon when off */}
+                        <span className={`absolute inset-y-0 right-1 flex items-center pr-1 transition-opacity ${played ? "opacity-0" : "opacity-100"}`} aria-hidden>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="stroke-slate-300" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M5 12H19" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                      </button>
+                    </td>
+
+                    {/* Player */}
+                    <td className="px-3 py-3 text-slate-100">
+                      <div className="flex items-center gap-3">
+                        {p.photo_url ? (
+                          <button
+                            type="button"
+                            onClick={() => setImageModalUrl?.(p.photo_url)}
+                            className="w-8 h-8 rounded-full overflow-hidden object-cover border border-slate-700 cursor-zoom-in p-0"
+                            aria-label={`Open photo for ${p.name}`}
+                          >
+                            <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover rounded-full" />
+                          </button>
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-300 border border-slate-700">
+                            {p.name?.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="text-sm">{p.name}</div>
+                      </div>
+                    </td>
+
+                    {/* Buy-in */}
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="text-xs text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          disabled={!played}
+                          inputMode="decimal"
+                          className={`w-28 rounded-md bg-slate-950/60 border px-2 py-1 text-right text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40 ${
+                            missingInputs ? "ring-rose-400/30 border-rose-600/20" : "border-slate-700"
+                          }`}
+                          placeholder="0.00"
+                          value={row.buyin ?? ""}
+                          onChange={(e) => handleChange(p.id, "buyin", e.target.value)}
+                        />
+                      </div>
+                    </td>
+
+                    {/* Cashout */}
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-2 justify-end">
+                        <span className="text-xs text-slate-400">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          disabled={!played}
+                          inputMode="decimal"
+                          className={`w-32 rounded-md bg-slate-950/60 border px-2 py-1 text-right text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40 ${
+                            missingInputs ? "ring-rose-400/30 border-rose-600/20" : "border-slate-700"
+                          }`}
+                          placeholder="0.00"
+                          value={row.cashout ?? ""}
+                          onChange={(e) => handleChange(p.id, "cashout", e.target.value)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Compact footer: remarks + actions */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-xs text-slate-400">
+            <strong className="text-slate-200">Remarks:</strong>{" "}
+            <span className="text-slate-400">
+              {rowsCount > 0 ? `${rowsCount} valid entries ready to save.` : "No complete rows yet — enter buy-in & cashout to include a row."}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setRows({})}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded-md bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-900/40 disabled:opacity-50"
+            >
+              Clear
+            </button>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="text-sm font-medium rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white px-4 py-2 disabled:opacity-60 shadow-lg shadow-emerald-500/20 transform transition-all hover:scale-105 active:scale-95"
+            >
+              {loading ? "Saving…" : "Save Game Result"}
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {/* Confirmation Modal */}
+      {confirmOpen && toSavePayload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          {/* backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmOpen(false)} />
+
+          {/* modal container: animate entrance with scale + fade */}
+          <div
+            className={`relative max-w-lg w-full bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl z-10 transform transition-all duration-180 ease-out
+              ${modalAnimateIn ? "scale-100 opacity-100" : "scale-95 opacity-0"}
+            `}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
+          >
+            <h4 id="confirm-modal-title" className="text-lg font-semibold text-slate-100">
+              Confirm save
+            </h4>
+
+            <p className="mt-2 text-sm text-slate-400">
+              You're about to save game result for date <span className="font-medium text-slate-100">{date}</span>.
+            </p>
+
+            {/* short list of player names with avatars, clickable avatar opens ImageModal (in-app) */}
+            <div className="mt-4">
+              <div className="text-xs text-slate-400 mb-2">Players included</div>
+              <div className="flex flex-wrap gap-2">
+                {toSavePayload.players &&
+                  (() => {
+                    const list = toSavePayload.players;
+                    const max = 6;
+                    const shown = list.slice(0, max);
+                    return (
+                      <>
+                        {shown.map((pl) => (
+                          <div key={pl.id} className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/60 border border-slate-700 text-sm text-slate-100">
+                            {/* avatar opens in-app image modal */}
+                            {pl.photo_url ? (
+                              <button
+                                type="button"
+                                onClick={() => setImageModalUrl?.(pl.photo_url)}
+                                className="w-6 h-6 rounded-full overflow-hidden object-cover border border-slate-700 p-0"
+                                aria-label={`Open photo for ${pl.name}`}
+                              >
+                                <img src={pl.photo_url} alt={pl.name} className="w-full h-full object-cover rounded-full" />
+                              </button>
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-200 border border-slate-600">
+                                {pl.name?.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+
+                            {/* name stays as plain text; clicking the name opens the player page in new tab (kept) */}
+                            <button
+                              type="button"
+                              onClick={() => window.open(`/player/${pl.id}`, "_blank")}
+                              className="text-sm text-slate-100 hover:underline"
+                            >
+                              {pl.name}
+                            </button>
+                          </div>
+                        ))}
+                        {list.length > max && (
+                          <div className="px-3 py-1 rounded-full bg-slate-800/40 border border-slate-700 text-sm text-slate-300">
+                            +{list.length - max} more
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="px-3 py-2 rounded-md bg-transparent border border-slate-700 text-slate-200 hover:bg-slate-800/50"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => performSave(toSavePayload.sessionsToInsert)}
+                disabled={loading}
+                className="px-4 py-2 rounded-md bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-medium shadow-md hover:scale-[1.02] transform transition-all disabled:opacity-60"
+              >
+                {loading ? "Saving…" : `Confirm and Save`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast / Snackbar */}
+      <div aria-live="polite" className="fixed bottom-6 right-6 z-50 flex items-end pointer-events-none">
+        <div
+          className={`pointer-events-auto max-w-xs w-full rounded-md p-3 text-sm shadow-lg transform transition-all duration-300
+            ${toast.visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"}
+            ${toast.type === "success" ? "bg-emerald-700/95 text-white" : toast.type === "error" ? "bg-rose-600/95 text-white" : "bg-slate-800/95 text-white"}
+          `}
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              {toast.type === "success" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="stroke-white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 13L10 18L20 6" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : toast.type === "error" ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="stroke-white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 10L14 14M14 10L10 14" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="stroke-white" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="1.6" />
+                </svg>
+              )}
+            </div>
+
+            <div className="flex-1">
+              <div className="font-medium">{toast.msg}</div>
+            </div>
+
+            <div className="flex-shrink-0">
+              <button onClick={() => setToast((t) => ({ ...t, visible: false }))} className="text-white/80 hover:text-white" aria-label="dismiss">
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <DatePicker
-        label="Game date"
-        value={date}
-        onChange={setDate}
-      />
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-slate-950 text-slate-500">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Played</th>
-              <th className="px-3 py-2 text-left font-medium">Player</th>
-              <th className="px-3 py-2 text-right font-medium">Buy-in</th>
-              <th className="px-3 py-2 text-right font-medium">
-                Amount After Game
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((p) => {
-              const row = rows[p.id] || {};
-              const played =
-                typeof row.played === "boolean" ? row.played : true;
-              return (
-                <tr
-                  key={p.id}
-                  className="border-t border-slate-900/80 hover:bg-slate-900/50"
-                >
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={played}
-                      onChange={() => handleTogglePlayed(p.id)}
-                      className="accent-emerald-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-slate-100">
-                    {p.name}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      disabled={!played}
-                      className="w-24 rounded bg-slate-950 border border-slate-700 px-1 py-1 text-[11px] text-slate-100 disabled:opacity-40"
-                      value={row.buyin ?? ""}
-                      onChange={(e) =>
-                        handleChange(p.id, "buyin", e.target.value)
-                      }
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      step="0.01"
-                      disabled={!played}
-                      className="w-28 rounded bg-slate-950 border border-slate-700 px-1 py-1 text-[11px] text-slate-100 disabled:opacity-40"
-                      value={row.cashout ?? ""}
-                      onChange={(e) =>
-                        handleChange(p.id, "cashout", e.target.value)
-                      }
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="text-xs font-medium rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-1.5 disabled:opacity-50"
-      >
-        Save Game Result
-      </button>
-    </form>
+    </>
   );
 }

@@ -15,18 +15,8 @@ function parseDateString(value) {
 }
 
 const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -34,30 +24,22 @@ const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 export default function DatePicker({ label, value, onChange }) {
   const [open, setOpen] = useState(false);
   const parsed = useMemo(() => parseDateString(value), [value]);
-  const [currentMonth, setCurrentMonth] = useState(
-    parsed || new Date()
-  );
+  const [currentMonth, setCurrentMonth] = useState(parsed || new Date());
 
   useEffect(() => {
-    if (parsed) {
-      setCurrentMonth(parsed);
-    }
+    if (parsed) setCurrentMonth(parsed);
   }, [parsed]);
 
   const daysGrid = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const firstOfMonth = new Date(year, month, 1);
-    const startDay = firstOfMonth.getDay(); // 0 = Sunday
+    const startDay = firstOfMonth.getDay();
     const startDate = new Date(year, month, 1 - startDay);
 
     const days = [];
     for (let i = 0; i < 42; i++) {
-      const date = new Date(
-        startDate.getFullYear(),
-        startDate.getMonth(),
-        startDate.getDate() + i
-      );
+      const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
       const inCurrentMonth = date.getMonth() === month;
       days.push({ date, inCurrentMonth });
     }
@@ -70,17 +52,11 @@ export default function DatePicker({ label, value, onChange }) {
     setOpen(false);
   };
 
-  const goPrevMonth = () => {
-    setCurrentMonth(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
-    );
-  };
+  const goPrevMonth = () =>
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
 
-  const goNextMonth = () => {
-    setCurrentMonth(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
-    );
-  };
+  const goNextMonth = () =>
+    setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
 
   const displayText = parsed
     ? parsed.toLocaleDateString(undefined, {
@@ -93,61 +69,89 @@ export default function DatePicker({ label, value, onChange }) {
   return (
     <div className="relative text-xs">
       {label && (
-        <label className="block text-[10px] text-slate-400 mb-1">
+        <label className="block text-[11px] text-slate-400 mb-1 tracking-wide">
           {label}
         </label>
       )}
 
+      {/* Trigger Button */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-xs text-slate-100 hover:border-emerald-500/70"
+        className="
+          w-full flex items-center justify-between rounded-lg
+          bg-slate-950/80 border border-slate-700
+          px-3 py-2 text-xs text-slate-100
+          transition-all duration-150
+          hover:border-emerald-400/60 hover:shadow-[0_0_8px_rgba(16,185,129,0.25)]
+        "
       >
-        <span className={parsed ? "" : "text-slate-500"}>
-          {displayText}
-        </span>
-        <span className="ml-2 text-slate-500 text-[11px]">
-          📅
-        </span>
+        <span className={parsed ? "" : "text-slate-500"}>{displayText}</span>
+
+        <span className="ml-2 text-slate-400 text-[13px]">📅</span>
       </button>
 
+      {/* Popup Calendar */}
       {open && (
-        <div className="absolute z-40 mt-2 w-64 rounded-xl border border-slate-700 bg-slate-950 shadow-xl p-3">
-          <div className="flex items-center justify-between mb-2">
+        <div
+          className="
+            absolute z-40 mt-2 w-72 rounded-xl border border-slate-700
+            bg-gradient-to-b from-slate-950 to-slate-900/90
+            shadow-2xl shadow-black/40 p-4 backdrop-blur-xl
+            animate-[scaleIn_0.15s_ease-out]
+          "
+          style={{
+            transformOrigin: "top right",
+          }}
+        >
+          {/* Month Header */}
+          <div className="flex items-center justify-between mb-3">
             <button
               type="button"
               onClick={goPrevMonth}
-              className="px-1.5 py-0.5 rounded-lg border border-slate-700 bg-slate-900 text-[11px] hover:bg-slate-800"
+              className="
+                w-7 h-7 flex items-center justify-center rounded-lg
+                bg-slate-800 border border-slate-700
+                text-slate-300 hover:bg-slate-700
+                transition-all duration-150 hover:scale-105
+              "
             >
               ‹
             </button>
-            <div className="text-[11px] font-medium text-slate-100">
-              {MONTH_NAMES[currentMonth.getMonth()]}{" "}
-              {currentMonth.getFullYear()}
+
+            <div className="text-[12px] font-semibold text-slate-100 tracking-wide">
+              {MONTH_NAMES[currentMonth.getMonth()]} {currentMonth.getFullYear()}
             </div>
+
             <button
               type="button"
               onClick={goNextMonth}
-              className="px-1.5 py-0.5 rounded-lg border border-slate-700 bg-slate-900 text-[11px] hover:bg-slate-800"
+              className="
+                w-7 h-7 flex items-center justify-center rounded-lg
+                bg-slate-800 border border-slate-700
+                text-slate-300 hover:bg-slate-700
+                transition-all duration-150 hover:scale-105
+              "
             >
               ›
             </button>
           </div>
 
-          <div className="grid grid-cols-7 text-[10px] text-slate-400 mb-1">
+          {/* Weekdays */}
+          <div className="grid grid-cols-7 text-[10px] text-slate-500 mb-1">
             {WEEKDAYS.map((d) => (
-              <div key={d} className="text-center py-0.5">
+              <div key={d} className="text-center tracking-wide">
                 {d}
               </div>
             ))}
           </div>
 
+          {/* Days Grid */}
           <div className="grid grid-cols-7 gap-1 text-[11px]">
             {daysGrid.map(({ date, inCurrentMonth }, idx) => {
               const iso = formatDate(date);
               const isSelected = value === iso;
-              const isToday =
-                iso === formatDate(new Date());
+              const isToday = iso === formatDate(new Date());
 
               return (
                 <button
@@ -155,16 +159,12 @@ export default function DatePicker({ label, value, onChange }) {
                   type="button"
                   onClick={() => handleSelect(date)}
                   className={[
-                    "w-7 h-7 flex items-center justify-center rounded-full border text-xs transition",
-                    !inCurrentMonth
-                      ? "text-slate-600 border-transparent"
-                      : "text-slate-100 border-slate-800",
-                    isToday && !isSelected
-                      ? "border-emerald-500/60"
-                      : "",
+                    "w-8 h-8 flex items-center justify-center rounded-lg text-xs transition-all duration-150",
+                    inCurrentMonth ? "text-slate-200" : "text-slate-600",
+                    isToday && !isSelected ? "border border-emerald-500/40" : "",
                     isSelected
-                      ? "bg-emerald-500 text-slate-950 border-emerald-400"
-                      : "hover:bg-slate-800",
+                      ? "bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-900 font-semibold shadow-lg shadow-emerald-500/40 border border-emerald-300"
+                      : "hover:bg-slate-800 hover:shadow-md hover:shadow-black/30",
                   ].join(" ")}
                 >
                   {date.getDate()}
@@ -174,6 +174,16 @@ export default function DatePicker({ label, value, onChange }) {
           </div>
         </div>
       )}
+
+      {/* Tiny animation keyframe */}
+      <style>
+        {`
+          @keyframes scaleIn {
+            0% { opacity: 0; transform: scale(0.92); }
+            100% { opacity: 1; transform: scale(1); }
+          }
+        `}
+      </style>
     </div>
   );
 }
