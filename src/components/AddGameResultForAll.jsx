@@ -1,9 +1,168 @@
 // src/components/AddGameResultForAll.jsx
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "../supabaseClient";
 import DatePicker from "./DatePicker";
 
+/* ----------------------- Memoized NumericControl ----------------------- */
+/* Props:
+  p: player object
+  field: "buyin" | "cashout"
+  value: string value for input
+  played: boolean
+  missingInputs: boolean
+  width: tailwind width e.g. "w-28"
+  onChange(value) -> update value
+  onInc(delta) -> increment by delta (number)
+  onStartAuto(delta) -> begin long-press auto
+  onStopAuto() -> stop auto
+  onPreset(add) -> preset add amount
+*/
+const NumericControl = React.memo(function NumericControl({
+  p,
+  field,
+  value,
+  played,
+  missingInputs,
+  width = "w-28",
+  onChange,
+  onInc,
+  onStartAuto,
+  onStopAuto,
+  onPreset,
+}) {
+  // caret preservation (best-effort) — save selection on focus and restore after updates
+  const selRef = useRef({ start: null, end: null });
+  const inputRef = useRef(null);
+
+  const onKeyDown = (e) => {
+    if (!played) return;
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      onInc(1);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      onInc(-1);
+    }
+  };
+
+  const onPointerDownDec = (e) => {
+    e.preventDefault();
+    if (!played) return;
+    onStartAuto(-1);
+  };
+  const onPointerDownInc = (e) => {
+    e.preventDefault();
+    if (!played) return;
+    onStartAuto(1);
+  };
+  const onPointerUp = () => onStopAuto();
+
+  useEffect(() => {
+    // try to restore selection after value changes (best-effort)
+    const node = inputRef.current;
+    if (!node) return;
+    const { start, end } = selRef.current;
+    if (start !== null && end !== null) {
+      try {
+        node.setSelectionRange(start, end);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+  }, [value]);
+
+  return (
+    <div className="flex items-center gap-2 justify-end">
+      <div className="flex items-center gap-1 mr-1">
+        <motion.button
+          type="button"
+          onClick={() => onPreset(50)}
+          disabled={!played}
+          whileTap={{ scale: 0.96 }}
+          className="text-xs px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition-transform"
+          aria-label="add 50"
+          title="+50"
+        >
+          +50
+        </motion.button>
+        <motion.button
+          type="button"
+          onClick={() => onPreset(100)}
+          disabled={!played}
+          whileTap={{ scale: 0.96 }}
+          className="text-xs px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition-transform"
+          aria-label="add 100"
+          title="+100"
+        >
+          +100
+        </motion.button>
+      </div>
+
+      <motion.button
+        type="button"
+        onMouseDown={onPointerDownDec}
+        onMouseUp={onPointerUp}
+        onMouseLeave={onPointerUp}
+        onTouchStart={onPointerDownDec}
+        onTouchEnd={onPointerUp}
+        onPointerDown={onPointerDownDec}
+        onPointerUp={onPointerUp}
+        disabled={!played}
+        whileTap={{ scale: 0.96 }}
+        className="flex items-center justify-center h-8 w-8 rounded-md bg-slate-800/60 border border-slate-700 text-slate-200 text-lg font-medium transition-transform disabled:opacity-40"
+        aria-label={`decrease ${field}`}
+      >
+        −
+      </motion.button>
+
+      <input
+        ref={inputRef}
+        type="number"
+        step="1"
+        inputMode="numeric"
+        disabled={!played}
+        onKeyDown={onKeyDown}
+        className={`no-arrows ${width} rounded-md bg-slate-950/60 border px-2 py-1 text-right text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40
+            ${missingInputs ? "ring-rose-400/30 border-rose-600/20" : "border-slate-700"}`}
+        placeholder="0"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => {
+          try {
+            selRef.current.start = e.target.selectionStart;
+            selRef.current.end = e.target.selectionEnd;
+          } catch (err) {
+            selRef.current.start = selRef.current.end = null;
+          }
+        }}
+        onBlur={() => {
+          selRef.current.start = selRef.current.end = null;
+        }}
+        aria-label={field}
+      />
+
+      <motion.button
+        type="button"
+        onMouseDown={onPointerDownInc}
+        onMouseUp={onPointerUp}
+        onMouseLeave={onPointerUp}
+        onTouchStart={onPointerDownInc}
+        onTouchEnd={onPointerUp}
+        onPointerDown={onPointerDownInc}
+        onPointerUp={onPointerUp}
+        disabled={!played}
+        whileTap={{ scale: 0.96 }}
+        className="flex items-center justify-center h-8 w-8 rounded-md bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-lg font-medium hover:scale-105 active:scale-95 transition-transform disabled:opacity-40 shadow-md"
+        aria-label={`increase ${field}`}
+      >
+        +
+      </motion.button>
+    </div>
+  );
+});
+
+/* ----------------------- Main Component ----------------------- */
 export default function AddGameResultForAll({ players = [], onAdded, setImageModalUrl }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [rows, setRows] = useState({});
@@ -19,11 +178,11 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
   const toastTimer = useRef(null);
   const autoTimersRef = useRef({});
 
-  const showToast = (msg, type = "info", ms = 3000) => {
+  const showToast = useCallback((msg, type = "info", ms = 3000) => {
     clearTimeout(toastTimer.current);
     setToast({ visible: true, msg, type });
     toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), ms);
-  };
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -46,7 +205,8 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
     }
   }, [confirmOpen]);
 
-  const handleChange = (playerId, field, value) => {
+  /* ------------------ stable handlers using useCallback ------------------ */
+  const handleChange = useCallback((playerId, field, value) => {
     const normalized = value === null || value === undefined ? "" : String(value);
     setRows((prev) => ({
       ...prev,
@@ -56,14 +216,14 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         [field]: normalized,
       },
     }));
-  };
+  }, []);
 
-  const numericOrZero = (v) => {
+  const numericOrZero = useCallback((v) => {
     const n = Number(v);
     return Number.isNaN(n) ? 0 : n;
-  };
+  }, []);
 
-  const handleInc = (playerId, field, delta) => {
+  const handleInc = useCallback((playerId, field, delta) => {
     setRows((prev) => {
       const current = prev[playerId] || {};
       const curVal = numericOrZero(current[field]);
@@ -73,13 +233,13 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         [playerId]: { ...current, [field]: String(next) },
       };
     });
-  };
+  }, [numericOrZero]);
 
-  const handlePreset = (playerId, field, add) => {
+  const handlePreset = useCallback((playerId, field, add) => {
     handleInc(playerId, field, add);
-  };
+  }, [handleInc]);
 
-  const handleTogglePlayed = (playerId) => {
+  const handleTogglePlayed = useCallback((playerId) => {
     setRows((prev) => {
       const current = prev[playerId] || {};
       const played = typeof current.played === "boolean" ? !current.played : false;
@@ -88,7 +248,7 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         [playerId]: { ...current, played },
       };
     });
-  };
+  }, []);
 
   // rowsCount used in remarks
   const rowsCount = useMemo(() => {
@@ -106,7 +266,7 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
   }, [players, rows]);
 
   // prepare sessions to insert given current rows
-  const buildSessionsToInsert = () => {
+  const buildSessionsToInsert = useCallback(() => {
     if (!players.length) return [];
 
     // generate ONE gameId for this save operation
@@ -134,77 +294,87 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         };
       })
       .filter(Boolean);
-  };
+  }, [players, rows, date]);
 
-  const performSave = async (sessionsToInsert) => {
-    if (!sessionsToInsert?.length) {
-      showToast("No valid rows to save.", "error", 3500);
-      return;
-    }
-    setConfirmOpen(false);
-    setLoading(true);
-    try {
-      const { error } = await supabase.from("sessions").insert(sessionsToInsert);
-      if (error) {
-        console.error("Error inserting game result", error);
-        showToast("Error saving game result. Check console.", "error", 4500);
-      } else {
-        setRows({});
-        onAdded?.();
-        // changed message to be game-centric
-        showToast("Game saved.", "success", 3000);
+  const performSave = useCallback(
+    async (sessionsToInsert) => {
+      if (!sessionsToInsert?.length) {
+        showToast("No valid rows to save.", "error", 3500);
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+      setConfirmOpen(false);
+      setLoading(true);
+      try {
+        const { error } = await supabase.from("sessions").insert(sessionsToInsert);
+        if (error) {
+          console.error("Error inserting game result", error);
+          showToast("Error saving game result. Check console.", "error", 4500);
+        } else {
+          setRows({});
+          onAdded?.();
+          showToast("Game saved.", "success", 3000);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onAdded, showToast]
+  );
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const sessionsToInsert = buildSessionsToInsert();
-    if (!sessionsToInsert.length) {
-      showToast("Enter buy-in and final amount for at least one player who played.", "error", 4500);
-      return;
-    }
-    const playerObjs = sessionsToInsert.map((s) => {
-      const p = players.find((pp) => pp.id === s.player_id);
-      return p ? { id: p.id, name: p.name, photo_url: p.photo_url } : { id: s.player_id, name: String(s.player_id) };
-    });
-    setToSavePayload({ sessionsToInsert, players: playerObjs });
-    setConfirmOpen(true);
-  };
+  const handleSubmit = useCallback(
+    (e) => {
+      e.preventDefault();
+      const sessionsToInsert = buildSessionsToInsert();
+      if (!sessionsToInsert.length) {
+        showToast("Enter buy-in and final amount for at least one player who played.", "error", 4500);
+        return;
+      }
+      const playerObjs = sessionsToInsert.map((s) => {
+        const p = players.find((pp) => pp.id === s.player_id);
+        return p ? { id: p.id, name: p.name, photo_url: p.photo_url } : { id: s.player_id, name: String(s.player_id) };
+      });
+      setToSavePayload({ sessionsToInsert, players: playerObjs });
+      setConfirmOpen(true);
+    },
+    [buildSessionsToInsert, players, showToast]
+  );
 
   if (!players.length) {
     return <div className="text-xs text-slate-500">No players yet. Add some players first.</div>;
   }
 
-  const startAuto = (playerId, field, delta) => {
+  /* ------------------ Auto-increment (long-press) ------------------ */
+  const startAuto = useCallback((playerId, field, delta) => {
     const key = `${playerId}-${field}`;
     // cancel if already running
-    stopAuto(playerId, field);
+    const running = autoTimersRef.current[key];
+    if (running) {
+      running.cancelled = true;
+      if (running.timeout) clearTimeout(running.timeout);
+      delete autoTimersRef.current[key];
+    }
 
     let delay = 350; // initial delay before first auto-step
     let stepDelay = 150; // repeating delay
     let minDelay = 40; // min delay for acceleration
     let accelFactor = 0.88; // multiplier to accelerate
-    let running = { cancelled: false };
-    autoTimersRef.current[key] = running;
+    let state = { cancelled: false };
+    autoTimersRef.current[key] = state;
 
-    // first step immediately (gives snappy response)
+    // first step immediately
     handleInc(playerId, field, delta);
 
     const loop = () => {
-      if (running.cancelled) return;
+      if (state.cancelled) return;
       handleInc(playerId, field, delta);
       stepDelay = Math.max(minDelay, Math.round(stepDelay * accelFactor));
-      running.timeout = setTimeout(loop, stepDelay);
+      state.timeout = setTimeout(loop, stepDelay);
     };
 
-    // start after short delay to allow single clicks
-    running.timeout = setTimeout(loop, delay);
-  };
+    state.timeout = setTimeout(loop, delay);
+  }, [handleInc]);
 
-  const stopAuto = (playerId, field) => {
+  const stopAuto = useCallback((playerId, field) => {
     const key = `${playerId}-${field}`;
     const running = autoTimersRef.current[key];
     if (running) {
@@ -212,119 +382,9 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
       if (running.timeout) clearTimeout(running.timeout);
       delete autoTimersRef.current[key];
     }
-  };
+  }, []);
 
-  // small helper: render numeric input with custom steppers, presets, keyboard, long-press
-  const NumericControl = ({ p, field, placeholder = "0", width = "w-28" }) => {
-    const row = rows[p.id] || {};
-    const played = typeof row.played === "boolean" ? row.played : true;
-    const missingInputs =
-      played &&
-      (row.buyin === undefined || row.cashout === undefined || row[field] === undefined || row[field] === "" || Number.isNaN(Number(row[field])));
-
-    const onKeyDown = (e) => {
-      if (!played) return;
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        handleInc(p.id, field, 1);
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        handleInc(p.id, field, -1);
-      }
-    };
-
-    // handlers for mouse/touch long press
-    const onPointerDownDec = (e) => {
-      e.preventDefault();
-      if (!played) return;
-      startAuto(p.id, field, -1);
-    };
-    const onPointerDownInc = (e) => {
-      e.preventDefault();
-      if (!played) return;
-      startAuto(p.id, field, 1);
-    };
-
-    const onPointerUp = () => stopAuto(p.id, field);
-
-    return (
-      <div className="flex items-center gap-2 justify-end">
-        <div className="flex items-center gap-1 mr-1">
-          <motion.button
-            type="button"
-            onClick={() => handlePreset(p.id, field, 50)}
-            disabled={!played}
-            whileTap={{ scale: 0.96 }}
-            className="text-xs px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition-transform"
-            aria-label="add 50"
-            title="+50"
-          >
-            +50
-          </motion.button>
-          <motion.button
-            type="button"
-            onClick={() => handlePreset(p.id, field, 100)}
-            disabled={!played}
-            whileTap={{ scale: 0.96 }}
-            className="text-xs px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 hover:bg-slate-700 disabled:opacity-40 transition-transform"
-            aria-label="add 100"
-            title="+100"
-          >
-            +100
-          </motion.button>
-        </div>
-
-        <motion.button
-          type="button"
-          onMouseDown={onPointerDownDec}
-          onMouseUp={onPointerUp}
-          onMouseLeave={onPointerUp}
-          onTouchStart={onPointerDownDec}
-          onTouchEnd={onPointerUp}
-          onPointerDown={onPointerDownDec}
-          onPointerUp={onPointerUp}
-          disabled={!played}
-          whileTap={{ scale: 0.96 }}
-          className="flex items-center justify-center h-8 w-8 rounded-md bg-slate-800/60 border border-slate-700 text-slate-200 text-lg font-medium transition-transform disabled:opacity-40"
-          aria-label={`decrease ${field}`}
-        >
-          −
-        </motion.button>
-
-        <input
-          type="number"
-          step="1"
-          inputMode="numeric"
-          disabled={!played}
-          onKeyDown={onKeyDown}
-          className={`no-arrows ${width} rounded-md bg-slate-950/60 border px-2 py-1 text-right text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-40
-            ${missingInputs ? "ring-rose-400/30 border-rose-600/20" : "border-slate-700"}`}
-          placeholder={placeholder}
-          value={row[field] ?? ""}
-          onChange={(e) => handleChange(p.id, field, e.target.value)}
-          aria-label={field}
-        />
-
-        <motion.button
-          type="button"
-          onMouseDown={onPointerDownInc}
-          onMouseUp={onPointerUp}
-          onMouseLeave={onPointerUp}
-          onTouchStart={onPointerDownInc}
-          onTouchEnd={onPointerUp}
-          onPointerDown={onPointerDownInc}
-          onPointerUp={onPointerUp}
-          disabled={!played}
-          whileTap={{ scale: 0.96 }}
-          className="flex items-center justify-center h-8 w-8 rounded-md bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-lg font-medium hover:scale-105 active:scale-95 transition-transform disabled:opacity-40 shadow-md"
-          aria-label={`increase ${field}`}
-        >
-          +
-        </motion.button>
-      </div>
-    );
-  };
-
+  /* ------------------ render ------------------ */
   return (
     <>
       <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950/80 to-slate-900/80 p-5 space-y-4 relative">
@@ -421,14 +481,38 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
                     <td className="px-3 py-3 text-right align-middle">
                       <div className="inline-flex items-center gap-2 justify-end">
                         <span className="text-xs text-slate-400 self-start mt-1">₹</span>
-                        <NumericControl p={p} field="buyin" placeholder="0" width="w-28" />
+                        <NumericControl
+                          p={p}
+                          field="buyin"
+                          value={rows[p.id]?.buyin ?? ""}
+                          played={played}
+                          missingInputs={missingInputs}
+                          width="w-28"
+                          onChange={(val) => handleChange(p.id, "buyin", val)}
+                          onInc={(delta) => handleInc(p.id, "buyin", delta)}
+                          onStartAuto={(d) => startAuto(p.id, "buyin", d)}
+                          onStopAuto={() => stopAuto(p.id, "buyin")}
+                          onPreset={(add) => handlePreset(p.id, "buyin", add)}
+                        />
                       </div>
                     </td>
 
                     <td className="px-3 py-3 text-right align-middle">
                       <div className="inline-flex items-center gap-2 justify-end">
                         <span className="text-xs text-slate-400 self-start mt-1">₹</span>
-                        <NumericControl p={p} field="cashout" placeholder="0" width="w-32" />
+                        <NumericControl
+                          p={p}
+                          field="cashout"
+                          value={rows[p.id]?.cashout ?? ""}
+                          played={played}
+                          missingInputs={missingInputs}
+                          width="w-32"
+                          onChange={(val) => handleChange(p.id, "cashout", val)}
+                          onInc={(delta) => handleInc(p.id, "cashout", delta)}
+                          onStartAuto={(d) => startAuto(p.id, "cashout", d)}
+                          onStopAuto={() => stopAuto(p.id, "cashout")}
+                          onPreset={(add) => handlePreset(p.id, "cashout", add)}
+                        />
                       </div>
                     </td>
                   </motion.tr>
@@ -441,7 +525,7 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         {/* footer */}
         <div className="flex items-center justify-between gap-4">
           <div className="text-xs text-slate-400">
-            <strong className="text-slate-200">Remarks:</strong>{' '}
+            <strong className="text-slate-200">Remarks:</strong>{" "}
             <span className="text-slate-400">{rowsCount > 0 ? `${rowsCount} valid entries ready to save.` : "No complete rows yet — enter buy-in & cashout to include a row."}</span>
           </div>
 
@@ -466,7 +550,7 @@ export default function AddGameResultForAll({ players = [], onAdded, setImageMod
         </div>
       </form>
 
-      {/* Confirmation Modal (unchanged from previous) */}
+      {/* Confirmation Modal */}
       {confirmOpen && toSavePayload && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmOpen(false)} />
