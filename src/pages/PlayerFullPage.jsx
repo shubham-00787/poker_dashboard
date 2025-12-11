@@ -16,9 +16,17 @@ import {
   Bar,
 } from "recharts";
 import ImageModal from "../components/ImageModal";
+import { Trophy, TrendingUp, TrendingDown, Zap, Star } from "lucide-react";
 
 const PIE_COLORS = ["#10b981", "#6366f1"];
 const DIST_COLORS = ["#f97373", "#fb7185", "#e5e7eb", "#4ade80", "#22c55e"];
+
+/**
+ * PlayerFullPage — polished:
+ * - Removed sparklines from stat tiles
+ * - Ensure 2× games aren't double-counted in 1.5× bucket
+ * - Improved typography, hover/card lift, subtle gradients
+ */
 
 export default function PlayerFullPage() {
   const { id } = useParams();
@@ -64,6 +72,7 @@ export default function PlayerFullPage() {
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
 
+  // Basic stats: total games, profit, buyin, ROI
   const stats = useMemo(() => {
     if (!sessions.length) {
       return {
@@ -78,12 +87,8 @@ export default function PlayerFullPage() {
       (sum, g) => sum + (Number(g.cashout) - Number(g.buyin)),
       0
     );
-    const totalBuyin = sessions.reduce(
-      (sum, g) => sum + Number(g.buyin),
-      0
-    );
-    const roi =
-      totalBuyin > 0 ? ((totalProfit / totalBuyin) * 100).toFixed(1) : "0.0";
+    const totalBuyin = sessions.reduce((sum, g) => sum + Number(g.buyin), 0);
+    const roi = totalBuyin > 0 ? ((totalProfit / totalBuyin) * 100).toFixed(1) : "0.0";
 
     return {
       totalGames: sessions.length,
@@ -91,6 +96,50 @@ export default function PlayerFullPage() {
       totalBuyin,
       roi,
     };
+  }, [sessions]);
+
+  // Additional counts: wins, losses, 2x, 1.5x (non-overlapping), best game
+  const extraStats = useMemo(() => {
+    const res = {
+      wins: 0,
+      losses: 0,
+      twoX: 0, // cashout >= 2 * buyin
+      onePointFiveX: 0, // cashout >= 1.5 * buyin AND < 2*buyin
+      bestGame: null, // { profit, date, buyin, cashout }
+    };
+
+    if (!sessions.length) return res;
+
+    let bestProfit = -Infinity;
+    sessions.forEach((g) => {
+      const buy = Number(g.buyin);
+      const cash = Number(g.cashout);
+      const profit = cash - buy;
+
+      if (profit > 0) res.wins += 1;
+      if (profit < 0) res.losses += 1;
+
+      // 2x check
+      const is2x = buy > 0 && cash >= buy * 2;
+      if (is2x) {
+        res.twoX += 1;
+      } else if (buy > 0 && cash >= buy * 1.5) {
+        // only count 1.5x when NOT already 2x
+        res.onePointFiveX += 1;
+      }
+
+      if (profit > bestProfit) {
+        bestProfit = profit;
+        res.bestGame = {
+          profit,
+          date: g.game_date,
+          buyin: buy,
+          cashout: cash,
+        };
+      }
+    });
+
+    return res;
   }, [sessions]);
 
   // Profit trend line data (cumulative)
@@ -109,14 +158,8 @@ export default function PlayerFullPage() {
 
   // Pie chart: total buy-in vs cash-out
   const pieData = useMemo(() => {
-    const totalBuyin = sessions.reduce(
-      (sum, g) => sum + Number(g.buyin),
-      0
-    );
-    const totalCashout = sessions.reduce(
-      (sum, g) => sum + Number(g.cashout),
-      0
-    );
+    const totalBuyin = sessions.reduce((sum, g) => sum + Number(g.buyin), 0);
+    const totalCashout = sessions.reduce((sum, g) => sum + Number(g.cashout), 0);
     return [
       { name: "Total Buy-in", value: totalBuyin },
       { name: "Total Cash-out", value: totalCashout },
@@ -151,23 +194,6 @@ export default function PlayerFullPage() {
     ];
   }, [sessions]);
 
-  // Heatmap-like data: each played day becomes a colored square
-  const heatmapCells = useMemo(() => {
-    const byDate = new Map();
-    sessions.forEach((g) => {
-      const profit = Number(g.cashout) - Number(g.buyin);
-      const existing = byDate.get(g.game_date) || 0;
-      byDate.set(g.game_date, existing + profit);
-    });
-
-    return Array.from(byDate.entries())
-      .sort(([d1], [d2]) => (d1 < d2 ? -1 : 1))
-      .map(([date, profit]) => ({
-        date,
-        profit,
-      }));
-  }, [sessions]);
-
   if (loading || !player) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
@@ -177,135 +203,136 @@ export default function PlayerFullPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-6 px-4 md:px-6">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 py-8 px-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Top bar */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="text-[11px] text-slate-400 hover:text-emerald-400"
-            >
+            <Link to="/" className="text-sm text-slate-400 hover:text-emerald-400">
               ← Back to Dashboard
             </Link>
           </div>
-          <div className="text-[11px] text-slate-500">
-            Player dashboard
-          </div>
+          <div className="text-sm text-slate-500">Player dashboard</div>
         </div>
 
-        {/* Header with avatar */}
+        {/* Header with avatar + big summary */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
             {player.photo_url ? (
               <img
                 src={player.photo_url}
                 alt={player.name}
                 onClick={() => setImageModalUrl(player.photo_url)}
-                className="w-16 h-16 rounded-full border border-slate-700 object-cover cursor-zoom-in hover:opacity-80"
+                className="w-20 h-20 rounded-full border border-slate-700 object-cover cursor-zoom-in hover:opacity-90 transition"
+                style={{ width: 80, height: 80 }}
               />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center text-xl text-slate-200 border border-slate-700">
+              <div
+                className="w-20 h-20 rounded-full bg-slate-900 flex items-center justify-center text-2xl text-slate-200 border border-slate-700"
+                style={{ width: 80, height: 80 }}
+              >
                 {player.name?.charAt(0).toUpperCase()}
               </div>
             )}
             <div>
-              <h1 className="text-2xl font-semibold text-slate-50">
-                {player.name}
-              </h1>
-              <p className="text-xs text-slate-500">
-                Full performance overview · {stats.totalGames} games tracked
+              <h1 className="text-3xl font-semibold text-slate-50 leading-tight">{player.name}</h1>
+              <p className="text-sm text-slate-400 mt-1">
+                Full performance overview · <span className="font-medium text-slate-200">{stats.totalGames}</span>{" "}
+                games tracked
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-right text-xs">
-            <div>
-              <div className="text-[10px] text-slate-400">
-                Net Profit
-              </div>
+          {/* Compact netprofit/roi box */}
+          <div className="flex gap-4 items-center">
+            <div className="rounded-xl p-4 border border-slate-800 bg-gradient-to-b from-slate-900/40 to-slate-900/25 text-right min-w-[150px] shadow-sm transform transition hover:-translate-y-1">
+              <div className="text-xs text-slate-400">Net Profit</div>
               <div
-                className={`text-base font-semibold ${
-                  stats.totalProfit > 0
-                    ? "text-emerald-400"
-                    : stats.totalProfit < 0
-                    ? "text-rose-400"
-                    : "text-slate-200"
+                className={`text-lg font-bold ${
+                  stats.totalProfit > 0 ? "text-emerald-400" : stats.totalProfit < 0 ? "text-rose-400" : "text-slate-200"
                 }`}
               >
                 {stats.totalProfit >= 0 ? "+" : ""}
                 {stats.totalProfit.toFixed(2)}
               </div>
+              <div className="text-[12px] text-slate-500 mt-1">Total cashflow across games</div>
             </div>
-            <div>
-              <div className="text-[10px] text-slate-400">
-                ROI
-              </div>
-              <div className="text-base font-semibold text-slate-100">
-                {stats.roi}%
-              </div>
+
+            <div className="rounded-xl p-4 border border-slate-800 bg-slate-900/30 text-right min-w-[120px] shadow-sm transform transition hover:-translate-y-1">
+              <div className="text-xs text-slate-400">ROI</div>
+              <div className="text-lg font-bold text-slate-100">{stats.roi}%</div>
+              <div className="text-[12px] text-slate-500 mt-1">Return on buy-ins</div>
             </div>
           </div>
         </div>
 
-        {/* Stats cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Stat tile row (no sparklines) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
-            label="Total Games"
+            label="Total games"
             value={stats.totalGames}
+            sub="All tracked games"
+            icon={<Zap size={18} />}
+            accent="bg-slate-800/40"
           />
           <StatCard
-            label="Total Buy-in"
-            value={stats.totalBuyin.toFixed(2)}
+            label="Total wins"
+            value={extraStats.wins}
+            sub="Profit > 0"
+            icon={<Trophy size={18} />}
+            accent="bg-emerald-900/10"
           />
           <StatCard
-            label="Total Cash-out"
-            value={(
-              stats.totalBuyin + stats.totalProfit
-            ).toFixed(2)}
+            label="Total losses"
+            value={extraStats.losses}
+            sub="Loss < 0"
+            icon={<TrendingDown size={18} />}
+            accent="bg-rose-900/8"
           />
-          <StatCard label="ROI" value={`${stats.roi}%`} />
+          <StatCard
+            label="2× games"
+            value={extraStats.twoX}
+            sub="Cash-out ≥ 2× buy-in"
+            icon={<TrendingUp size={18} />}
+            accent="bg-amber-900/8"
+          />
+          <StatCard
+            label="1.5× games"
+            value={extraStats.onePointFiveX}
+            sub="Cash-out ≥ 1.5× & < 2×"
+            icon={<Star size={18} />}
+            accent="bg-blue-900/8"
+          />
         </div>
 
-        {/* Charts row: profit trend + pie */}
+        {/* Best game & main trend row — bigger + polished */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-semibold text-slate-200">
-                Profit trend (per game)
-              </h2>
-              <span className="text-[10px] text-slate-500">
-                Cumulative profit over time
-              </span>
+          <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/40 to-slate-900/25 p-6 shadow-sm transform transition hover:-translate-y-1">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-2xl font-semibold text-slate-100">Profit trend</h3>
+                <p className="text-sm text-slate-400 mt-1">Cumulative profit per game — see momentum</p>
+              </div>
+              <div className="text-sm text-slate-400">{stats.totalGames} games</div>
             </div>
-            <div className="h-56">
+
+            <div className="h-64 mt-5">
               {profitTrendData.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={profitTrendData}>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10, fill: "#9ca3af" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "#9ca3af" }}
-                    />
+                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#9ca3af" }} />
+                    <YAxis tick={{ fontSize: 12, fill: "#9ca3af" }} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "#020617",
                         border: "1px solid #1f2937",
-                        fontSize: 11,
+                        fontSize: 12,
                         color: "#e5e7eb",
                       }}
                       labelStyle={{ color: "#e5e7eb" }}
                       itemStyle={{ color: "#e5e7eb" }}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="cumulative"
-                      stroke="#22c55e"
-                      strokeWidth={2}
-                      dot={false}
-                    />
+                    <Line type="monotone" dataKey="cumulative" stroke="#22c55e" strokeWidth={3} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -314,28 +341,57 @@ export default function PlayerFullPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-semibold text-slate-200">
-                Buy-in vs Cash-out
-              </h2>
+          {/* Best game card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 flex flex-col justify-between shadow-sm transform transition hover:-translate-y-1">
+            <div>
+              <h3 className="text-2xl font-semibold text-slate-100">Best game</h3>
+              {extraStats.bestGame ? (
+                <>
+                  <div className="mt-4">
+                    <div className="text-4xl font-extrabold text-emerald-400">
+                      +{extraStats.bestGame.profit.toFixed(2)}
+                    </div>
+                    <div className="text-sm text-slate-400 mt-1">{extraStats.bestGame.date}</div>
+
+                    <div className="mt-4 text-sm text-slate-300 space-y-1">
+                      <div>
+                        <span className="text-slate-400">Buy-in:</span>{" "}
+                        <span className="font-medium text-slate-100">{extraStats.bestGame.buyin.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Cash-out:</span>{" "}
+                        <span className="font-medium text-slate-100">{extraStats.bestGame.cashout.toFixed(2)}</span>
+                      </div>
+                      <div className="mt-2">
+                        <span className="inline-block text-xs px-2 py-1 rounded-full bg-slate-800/50 text-slate-200 border border-slate-700">
+                          Top performance
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 text-sm text-slate-400">No games yet</div>
+              )}
             </div>
-            <div className="h-56 flex items-center justify-center">
+
+            <div className="mt-6 text-sm text-slate-500">Tip: prioritize sessions that yield high multipliers — they improve ROI fastest.</div>
+          </div>
+        </div>
+
+        {/* Charts row: pie + distribution */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 lg:col-span-1 shadow-sm transform transition hover:-translate-y-0.5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-slate-200">Buy-in vs Cash-out</h2>
+            </div>
+            <div className="h-44 flex items-center justify-center">
               {pieData[0].value + pieData[1].value > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={pieData}
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
+                    <Pie data={pieData} innerRadius={36} outerRadius={70} paddingAngle={3} dataKey="value">
                       {pieData.map((_, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={PIE_COLORS[index % PIE_COLORS.length]}
-                        />
+                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -354,37 +410,24 @@ export default function PlayerFullPage() {
                 <EmptyChartPlaceholder />
               )}
             </div>
-            <div className="mt-2 flex justify-center gap-4 text-[10px] text-slate-400">
+            <div className="mt-3 flex justify-center gap-4 text-[12px] text-slate-400">
               <LegendDot color={PIE_COLORS[0]} label="Total Buy-in" />
               <LegendDot color={PIE_COLORS[1]} label="Total Cash-out" />
             </div>
           </div>
-        </div>
 
-        {/* Second charts row: distribution + heatmap */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 lg:col-span-2 shadow-sm transform transition hover:-translate-y-0.5">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-semibold text-slate-200">
-                Profit distribution
-              </h2>
-              <span className="text-[10px] text-slate-500">
-                Categories of game results
-              </span>
+              <h2 className="text-lg font-semibold text-slate-200">Profit distribution</h2>
+              <span className="text-[13px] text-slate-500">Categories of game results</span>
             </div>
-            <div className="h-56">
+
+            <div className="h-44">
               {stats.totalGames ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={profitDistribution}>
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 10, fill: "#9ca3af" }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 10, fill: "#9ca3af" }}
-                    />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#9ca3af" }} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#9ca3af" }} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "#020617",
@@ -397,10 +440,7 @@ export default function PlayerFullPage() {
                     />
                     <Bar dataKey="count">
                       {profitDistribution.map((_, index) => (
-                        <Cell
-                          key={index}
-                          fill={DIST_COLORS[index % DIST_COLORS.length]}
-                        />
+                        <Cell key={index} fill={DIST_COLORS[index % DIST_COLORS.length]} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -410,99 +450,36 @@ export default function PlayerFullPage() {
               )}
             </div>
           </div>
-
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-semibold text-slate-200">
-                Profit heatmap
-              </h2>
-              <span className="text-[10px] text-slate-500">
-                Each square is a day played (green = win, red = loss)
-              </span>
-            </div>
-            <div className="h-56">
-              {heatmapCells.length ? (
-                <div className="h-full flex flex-col justify-between">
-                  <div className="grid auto-rows-[18px] grid-flow-col auto-cols-[18px] gap-1 overflow-x-auto pb-1">
-                    {heatmapCells.map((cell) => {
-                      const profit = cell.profit;
-                      let bg = "bg-slate-800";
-                      if (profit > 0 && profit < 100) bg = "bg-emerald-500/60";
-                      else if (profit >= 100) bg = "bg-emerald-400";
-                      else if (profit < 0 && profit > -100) bg = "bg-rose-500/60";
-                      else if (profit <= -100) bg = "bg-rose-400";
-
-                      return (
-                        <div
-                          key={cell.date}
-                          className={`w-[18px] h-[18px] rounded-sm ${bg} border border-slate-900`}
-                          title={`${cell.date}: ${
-                            profit >= 0 ? "+" : ""
-                          }${profit.toFixed(2)}`}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between items-center mt-2 text-[10px] text-slate-400">
-                    <span>Older</span>
-                    <span>Newer</span>
-                  </div>
-                </div>
-              ) : (
-                <EmptyChartPlaceholder />
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Raw table at bottom */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-slate-200">
-              Game history
-            </h2>
-            <span className="text-[10px] text-slate-500">
-              {stats.totalGames} games
-            </span>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden shadow-sm transform transition hover:-translate-y-0.5">
+          <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-200">Game history</h2>
+            <span className="text-[13px] text-slate-500">{stats.totalGames} games</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
-                  <th className="px-3 py-2 text-left">Date</th>
-                  <th className="px-3 py-2 text-right">Buy-in</th>
-                  <th className="px-3 py-2 text-right">Cash-out</th>
-                  <th className="px-3 py-2 text-right">Profit</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-right">Buy-in</th>
+                  <th className="px-4 py-3 text-right">Cash-out</th>
+                  <th className="px-4 py-3 text-right">Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {sessions
                   .slice()
-                  .sort((a, b) =>
-                    a.game_date < b.game_date ? 1 : -1
-                  )
+                  .sort((a, b) => (a.game_date < b.game_date ? 1 : -1))
                   .map((g) => {
-                    const profit =
-                      Number(g.cashout) - Number(g.buyin);
+                    const profit = Number(g.cashout) - Number(g.buyin);
                     return (
-                      <tr
-                        key={g.id}
-                        className="border-t border-slate-800 hover:bg-slate-900/60"
-                      >
-                        <td className="px-3 py-2">{g.game_date}</td>
-                        <td className="px-3 py-2 text-right">
-                          {Number(g.buyin).toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {Number(g.cashout).toFixed(2)}
-                        </td>
-                        <td
-                          className={`px-3 py-2 text-right ${
-                            profit >= 0
-                              ? "text-emerald-400"
-                              : "text-rose-400"
-                          }`}
-                        >
+                      <tr key={g.id} className="border-t border-slate-800 hover:bg-slate-900/60">
+                        <td className="px-4 py-3">{g.game_date}</td>
+                        <td className="px-4 py-3 text-right">{Number(g.buyin).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{Number(g.cashout).toFixed(2)}</td>
+                        <td className={`px-4 py-3 text-right ${profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                           {profit >= 0 ? "+" : ""}
                           {profit.toFixed(2)}
                         </td>
@@ -512,10 +489,7 @@ export default function PlayerFullPage() {
 
                 {sessions.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={4}
-                      className="px-3 py-4 text-center text-slate-500"
-                    >
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                       No games tracked yet.
                     </td>
                   </tr>
@@ -526,66 +500,83 @@ export default function PlayerFullPage() {
         </div>
       </div>
 
-      <ImageModal
-        url={imageModalUrl}
-        onClose={() => setImageModalUrl(null)}
-      />
+      <ImageModal url={imageModalUrl} onClose={() => setImageModalUrl(null)} />
     </div>
   );
 }
 
-// Define the new color tokens
+/* -------------------------
+   Styling tokens & tiny UI components
+   ------------------------- */
+
 const COLORS = {
-  primaryAccent: "#10b981", // Emerald (unchanged)
-  secondaryAccent: ["#f59e0b", "#fbbf24"], // Amber/Gold
-  tertiary: ["#3b82f6", "#60a5fa"], // Blue
-  success: "#34d399", // Brighter emerald
-  danger: "#f87171", // Vibrant red
+  primaryAccent: "#10b981",
+  success: "#34d399",
+  danger: "#f87171",
   gray: {
-    light: "#e5e7eb", // Slight purple tint
-    medium: "#6b7280", // Slight purple tint
-    dark: "#4b5563", // Slight purple tint
+    light: "#e5e7eb",
+    medium: "#9ca3af",
+    dark: "#4b5563",
   },
 };
 
-// Updated StatCard component
-function StatCard({ label, value }) {
-  return (
-    <div
-      className="p-4 rounded-xl border"
-      style={{
-        backgroundColor: "rgba(31, 41, 55, 0.6)", // Warm gray with purple tint
-        borderColor: COLORS.gray.dark,
-      }}
-    >
-      <div className="text-[10px]" style={{ color: COLORS.gray.medium }}>
-        {label}
+// StatCard supports label, value, subtitle, icon, accent color (optional)
+function StatCard({ label, value, sub, icon }) {
+    return (
+      <div
+        className="
+          p-5 rounded-xl border
+          bg-slate-900/60
+          border-slate-700/60
+          shadow-[0_4px_12px_rgba(0,0,0,0.25)]
+          hover:shadow-[0_6px_18px_rgba(0,0,0,0.35)]
+          transition-all duration-300
+          hover:-translate-y-1
+          flex flex-col justify-between
+        "
+      >
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="text-[13px] text-slate-400 font-medium">{label}</div>
+            <div className="text-3xl font-bold mt-1 text-slate-100">{value}</div>
+          </div>
+  
+          <div
+            className="
+              p-2 rounded-lg
+              bg-slate-800/70 border border-slate-700
+              text-slate-300
+            "
+          >
+            {icon}
+          </div>
+        </div>
+  
+        {sub && (
+          <div className="text-[12px] text-slate-500 mt-3 leading-snug">
+            {sub}
+          </div>
+        )}
       </div>
-      <div className="text-lg font-semibold mt-1" style={{ color: COLORS.gray.light }}>
-        {value}
-      </div>
-    </div>
-  );
-}
+    );
+  }
+  
 
-// Updated LegendDot component
+// LegendDot accepts a hex color string
 function LegendDot({ color, label }) {
   return (
-    <span className="flex items-center gap-1">
-      <span
-        className="w-2 h-2 rounded-full"
-        style={{ backgroundColor: COLORS[color] || color }}
-      />
+    <span className="flex items-center gap-2">
+      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
       <span style={{ color: COLORS.gray.light }}>{label}</span>
     </span>
   );
 }
 
-// Updated EmptyChartPlaceholder component
+// Empty chart placeholder
 function EmptyChartPlaceholder() {
   return (
     <div
-      className="w-full h-full flex items-center justify-center text-[11px]"
+      className="w-full h-full flex items-center justify-center text-[13px]"
       style={{ color: COLORS.gray.medium }}
     >
       Not enough data yet. Play a few games!
