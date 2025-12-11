@@ -26,6 +26,11 @@ const DIST_COLORS = ["#f97373", "#fb7185", "#e5e7eb", "#4ade80", "#22c55e"];
  * - Removed sparklines from stat tiles
  * - Ensure 2× games aren't double-counted in 1.5× bucket
  * - Improved typography, hover/card lift, subtle gradients
+ *
+ * Updates in this version:
+ * - Profit distribution thresholds changed: big loss <= -50, big win >= 50
+ * - Best game display no longer prefixes + for negative values and uses red color for negative
+ * - Added Rupee symbol (₹) to monetary values
  */
 
 export default function PlayerFullPage() {
@@ -166,7 +171,7 @@ export default function PlayerFullPage() {
     ];
   }, [sessions]);
 
-  // Profit distribution buckets
+  // Profit distribution buckets (updated thresholds: 50)
   const profitDistribution = useMemo(() => {
     const buckets = {
       bigLoss: 0,
@@ -178,19 +183,19 @@ export default function PlayerFullPage() {
 
     sessions.forEach((g) => {
       const profit = Number(g.cashout) - Number(g.buyin);
-      if (profit <= -200) buckets.bigLoss += 1;
+      if (profit <= -50) buckets.bigLoss += 1; // big loss: loss of 50 or more
       else if (profit < 0) buckets.loss += 1;
       else if (profit === 0) buckets.even += 1;
-      else if (profit < 200) buckets.win += 1;
-      else buckets.bigWin += 1;
+      else if (profit < 50) buckets.win += 1;
+      else buckets.bigWin += 1; // big win: win of 50 or more
     });
 
     return [
-      { label: "Big Loss (≤ -200)", count: buckets.bigLoss },
+      { label: "Big Loss (≤ -₹50)", count: buckets.bigLoss },
       { label: "Loss (< 0)", count: buckets.loss },
       { label: "Even (0)", count: buckets.even },
-      { label: "Win (< 200)", count: buckets.win },
-      { label: "Big Win (≥ 200)", count: buckets.bigWin },
+      { label: "Win (< ₹50)", count: buckets.win },
+      { label: "Big Win (≥ ₹50)", count: buckets.bigWin },
     ];
   }, [sessions]);
 
@@ -252,8 +257,7 @@ export default function PlayerFullPage() {
                   stats.totalProfit > 0 ? "text-emerald-400" : stats.totalProfit < 0 ? "text-rose-400" : "text-slate-200"
                 }`}
               >
-                {stats.totalProfit >= 0 ? "+" : ""}
-                {stats.totalProfit.toFixed(2)}
+                {stats.totalProfit >= 0 ? "+" : ""}₹{stats.totalProfit.toFixed(2)}
               </div>
               <div className="text-[12px] text-slate-500 mt-1">Total cashflow across games</div>
             </div>
@@ -348,19 +352,19 @@ export default function PlayerFullPage() {
               {extraStats.bestGame ? (
                 <>
                   <div className="mt-4">
-                    <div className="text-4xl font-extrabold text-emerald-400">
-                      +{extraStats.bestGame.profit.toFixed(2)}
+                    <div className={`text-4xl font-extrabold ${extraStats.bestGame.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {extraStats.bestGame.profit >= 0 ? `+₹${extraStats.bestGame.profit.toFixed(2)}` : `₹${extraStats.bestGame.profit.toFixed(2)}`}
                     </div>
                     <div className="text-sm text-slate-400 mt-1">{extraStats.bestGame.date}</div>
 
                     <div className="mt-4 text-sm text-slate-300 space-y-1">
                       <div>
                         <span className="text-slate-400">Buy-in:</span>{" "}
-                        <span className="font-medium text-slate-100">{extraStats.bestGame.buyin.toFixed(2)}</span>
+                        <span className="font-medium text-slate-100">₹{extraStats.bestGame.buyin.toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-slate-400">Cash-out:</span>{" "}
-                        <span className="font-medium text-slate-100">{extraStats.bestGame.cashout.toFixed(2)}</span>
+                        <span className="font-medium text-slate-100">₹{extraStats.bestGame.cashout.toFixed(2)}</span>
                       </div>
                       <div className="mt-2">
                         <span className="inline-block text-xs px-2 py-1 rounded-full bg-slate-800/50 text-slate-200 border border-slate-700">
@@ -411,8 +415,8 @@ export default function PlayerFullPage() {
               )}
             </div>
             <div className="mt-3 flex justify-center gap-4 text-[12px] text-slate-400">
-              <LegendDot color={PIE_COLORS[0]} label="Total Buy-in" />
-              <LegendDot color={PIE_COLORS[1]} label="Total Cash-out" />
+              <LegendDot color={PIE_COLORS[0]} label="Total Buy-in (₹)" />
+              <LegendDot color={PIE_COLORS[1]} label="Total Cash-out (₹)" />
             </div>
           </div>
 
@@ -463,9 +467,9 @@ export default function PlayerFullPage() {
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
                   <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-right">Buy-in</th>
-                  <th className="px-4 py-3 text-right">Cash-out</th>
-                  <th className="px-4 py-3 text-right">Profit</th>
+                  <th className="px-4 py-3 text-right">Buy-in (₹)</th>
+                  <th className="px-4 py-3 text-right">Cash-out (₹)</th>
+                  <th className="px-4 py-3 text-right">Profit (₹)</th>
                 </tr>
               </thead>
               <tbody>
@@ -477,11 +481,10 @@ export default function PlayerFullPage() {
                     return (
                       <tr key={g.id} className="border-t border-slate-800 hover:bg-slate-900/60">
                         <td className="px-4 py-3">{g.game_date}</td>
-                        <td className="px-4 py-3 text-right">{Number(g.buyin).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right">{Number(g.cashout).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">₹{Number(g.buyin).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">₹{Number(g.cashout).toFixed(2)}</td>
                         <td className={`px-4 py-3 text-right ${profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                          {profit >= 0 ? "+" : ""}
-                          {profit.toFixed(2)}
+                          {profit >= 0 ? "+" : ""}₹{profit.toFixed(2)}
                         </td>
                       </tr>
                     );
