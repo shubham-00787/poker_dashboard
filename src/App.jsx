@@ -209,10 +209,12 @@ function DashboardPage({
                       <div className="flex items-center justify-center gap-2">
                         {(row.streak || []).length === 0 && <span className="text-[11px] text-slate-500">–</span>}
                         {(row.streak || []).map((s, i) => {
-                          const val = row.lastFive && row.lastFive[i] !== undefined ? row.lastFive[i] : null;
-                          const positive = val !== null && !Number.isNaN(Number(val)) && Number(val) > 0;
-                          const negative = val !== null && !Number.isNaN(Number(val)) && Number(val) < 0;
-
+                          const game = row.lastFive?.[i];
+                          const val = game?.value ?? null;
+                          const date = game?.date ?? null;
+                          
+                          const positive = typeof val === "number" && val > 0;
+                          const negative = typeof val === "number" && val < 0;
                           return (
                             <div
                               key={i}
@@ -234,7 +236,7 @@ function DashboardPage({
                                 {s}
                               </div>
 
-                              {hoverTip.playerId === row.player.id && hoverTip.idx === i && val !== null && val !== undefined && !Number.isNaN(Number(val)) && (
+                              {hoverTip.playerId === row.player.id && hoverTip.idx === i && typeof val === "number" && (
                                 <div className="absolute left-1/2 -top-10 transform -translate-x-1/2">
                                   <div className="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium shadow-md"
                                        style={{
@@ -585,8 +587,13 @@ export default function App() {
         const sess = (per.get(p.id) || []).slice().sort((a, b) => (a.game_date < b.game_date ? 1 : -1));
         const totalGames = sess.length;
         const netProfit = sess.reduce((a, g) => a + (Number(g.cashout) - Number(g.buyin)), 0);
-        const lastFive = sess.slice(-5).map((g) => Number(g.cashout) - Number(g.buyin));
-        const lastFiveDisplay = lastFive.slice(-5).map((v) => (v >= 0 ? "W" : "L"));
+        const lastFive = sess.slice(0, 5).map((g) => ({
+          value: Number(g.cashout) - Number(g.buyin),
+          date: g.game_date,
+        }));
+        const lastFiveDisplay = lastFive.map((g) =>
+          g.value >= 0 ? "W" : "L"
+        );
         const totalBuyin = sess.reduce((a, g) => a + Number(g.buyin), 0);
         const roi = totalBuyin > 0 ? (netProfit / totalBuyin) * 100 : 0;
         return { player: p, totalGames, netProfit, lastFive, streak: lastFiveDisplay, roi };
